@@ -15,7 +15,7 @@ import type { UserRole } from "@/lib/constants/roles"
  *   - Rutas /admin/*: requiere role=admin
  */
 
-const PUBLIC_PATHS = ["/", "/login", "/register", "/forgot-password", "/reset-password", "/auth/callback"]
+const PUBLIC_PATHS = ["/", "/login", "/register", "/forgot-password", "/reset-password", "/auth/callback", "/demo"]
 
 const ROUTE_ROLES: Record<string, UserRole> = {
   "/cliente": "client",
