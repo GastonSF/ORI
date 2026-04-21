@@ -34,6 +34,7 @@ type Props = {
   applicationId: string
   clientId: string
   existingDoc: ExistingDoc
+  readOnly?: boolean
 }
 
 // Debe coincidir con MAX_FILE_SIZE_BYTES del server (25 MB)
@@ -46,6 +47,7 @@ export function DocumentRow({
   applicationId,
   clientId,
   existingDoc,
+  readOnly = false,
 }: Props) {
   const router = useRouter()
   const inputRef = useRef<HTMLInputElement>(null)
@@ -184,7 +186,7 @@ export function DocumentRow({
               >
                 <Eye className="h-3.5 w-3.5" /> Ver
               </DocumentPreviewModal>
-              {status !== "approved" && (
+              {!readOnly && status !== "approved" && (
                 <>
                   <button
                     type="button"
@@ -206,6 +208,8 @@ export function DocumentRow({
                 </>
               )}
             </>
+          ) : readOnly ? (
+            <span className="text-xs text-gray-400 italic">No subido</span>
           ) : (
             <button
               type="button"
