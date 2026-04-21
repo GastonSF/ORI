@@ -28,6 +28,12 @@ import { DocumentRow } from "@/components/cliente/document-row"
 import { AdditionalDocumentRow } from "@/components/cliente/additional-document-row"
 import { SubmitApplicationButton } from "@/components/cliente/submit-application-button"
 
+type DocByIdEntry = {
+  id: string
+  file_name: string
+  file_size_bytes: number | null
+}
+
 export default async function ClientDocumentsPage() {
   const { user } = await requireRole("client")
   const supabase = await createClient()
@@ -88,8 +94,6 @@ export default async function ClientDocumentsPage() {
   const bucket = getStatusBucket(status)
   const fundingLine = app.funding_line as FundingLine | null
 
-  // ¿Estamos en fase ADICIONAL?
-  // Sí cuando: ya pasó el análisis inicial y eligió línea (tiene funding_line)
   const isAdditionalPhase =
     fundingLine !== null &&
     (bucket === "additional_docs_pending" ||
@@ -98,7 +102,6 @@ export default async function ClientDocumentsPage() {
       bucket === "approved" ||
       bucket === "rejected")
 
-  // ¿Está en paso 4 (esperando que elija línea)?
   if (bucket === "awaiting_funding_line_choice") {
     return (
       <div className="max-w-3xl mx-auto space-y-5">
@@ -403,7 +406,6 @@ async function AdditionalPhaseContent({
 }) {
   const supabase = await createClient()
 
-  // Pedidos adicionales para esta app
   const { data: requests } = await supabase
     .from("additional_document_requests")
     .select(
@@ -413,7 +415,6 @@ async function AdditionalPhaseContent({
     .neq("status", "cancelled")
     .order("created_at", { ascending: true })
 
-  // Documentos adicionales subidos (para joinear con los requests)
   const docIds = (requests ?? [])
     .map((r) => r.fulfilled_by_document_id)
     .filter((id): id is string => id !== null)
@@ -426,10 +427,7 @@ async function AdditionalPhaseContent({
           .in("id", docIds)
       : { data: [] }
 
-  const docsById: Record
-    string,
-    { id: string; file_name: string; file_size_bytes: number | null }
-  > = {}
+  const docsById: Record<string, DocByIdEntry> = {}
   for (const d of docs ?? []) {
     docsById[d.id] = d
   }
@@ -450,7 +448,6 @@ async function AdditionalPhaseContent({
 
   return (
     <>
-      {/* Banner de la línea elegida */}
       <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
         <div className="flex items-start gap-3">
           <GitBranch className="h-5 w-5 text-[#1b38e8] shrink-0 mt-0.5" />
@@ -466,7 +463,6 @@ async function AdditionalPhaseContent({
         </div>
       </div>
 
-      {/* Progreso de docs adicionales */}
       {totalRequired > 0 && (
         <section className="rounded-xl border border-gray-200 bg-white p-6">
           <div className="flex items-center justify-between text-xs mb-1.5">
@@ -495,7 +491,6 @@ async function AdditionalPhaseContent({
         </section>
       )}
 
-      {/* Banners de estado */}
       {bucket === "additional_docs_review" && (
         <div className="rounded-xl border border-gray-200 bg-gray-50 p-5">
           <div className="flex items-start gap-3">
@@ -513,7 +508,6 @@ async function AdditionalPhaseContent({
         </div>
       )}
 
-      {/* Lista de docs adicionales */}
       {allRequests.length > 0 ? (
         <section className="rounded-xl border border-gray-200 bg-white p-6">
           <div className="mb-4">
@@ -554,7 +548,6 @@ async function AdditionalPhaseContent({
         </section>
       )}
 
-      {/* Enviar para revisión */}
       {canSubmit && (
         <section className="rounded-xl border-2 border-[#1b38e8] bg-[#1b38e8]/5 p-6">
           <div className="flex items-start gap-4">
@@ -579,7 +572,6 @@ async function AdditionalPhaseContent({
         </section>
       )}
 
-      {/* Acordeón: ver docs iniciales */}
       <details className="rounded-xl border border-gray-200 bg-white p-4 group">
         <summary className="cursor-pointer text-sm font-medium text-gray-700 flex items-center justify-between">
           <span className="flex items-center gap-2">
@@ -597,7 +589,6 @@ async function AdditionalPhaseContent({
         </div>
       </details>
 
-      {/* Final */}
       {isFinalStatus(status) && (
         <div className="rounded-xl border border-gray-200 bg-gray-50 p-5">
           <div className="flex items-start gap-3">
@@ -618,7 +609,6 @@ async function AdditionalPhaseContent({
   )
 }
 
-// Acordeón con la lista compacta de docs iniciales (solo lectura)
 async function InitialDocsArchive({ appId }: { appId: string }) {
   const supabase = await createClient()
   const { data: docs } = await supabase
