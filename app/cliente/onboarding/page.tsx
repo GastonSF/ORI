@@ -66,7 +66,7 @@ export default async function OnboardingPage(props: { searchParams: SearchParams
   const { data: documents } = applicationId
     ? await supabase
         .from("documents")
-        .select("id, document_type, file_name, file_size_bytes, mime_type, status, uploaded_at")
+        .select("id, document_type, file_name, file_size_bytes, status, uploaded_at")
         .eq("application_id", applicationId)
         .order("uploaded_at", { ascending: false })
     : { data: [] }
