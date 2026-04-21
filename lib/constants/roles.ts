@@ -17,10 +17,20 @@ export const ROLE_LABELS: Record<UserRole, string> = {
 }
 
 export const ROLE_DASHBOARDS: Record<UserRole, string> = {
-  admin: "/admin",
-  officer: "/oficial",
-  analyst: "/analista",
+  admin: "/staff",
+  officer: "/staff",
+  analyst: "/staff",
   client: "/cliente",
+}
+
+/**
+ * Roles que tienen acceso a la vista interna /staff.
+ * Cualquier staff puede ver y operar todos los pasos del legajo.
+ */
+export const STAFF_ROLES: UserRole[] = ["officer", "analyst", "admin"]
+
+export function isStaffRole(role: UserRole): boolean {
+  return STAFF_ROLES.includes(role)
 }
 
 // ============================================================
@@ -486,4 +496,105 @@ export function getTimelineIndex(bucket: StatusBucket): number {
     case "cancelled":
       return 7
   }
+}
+
+// ============================================================
+// STAFF BUCKETS (UX) - agrupación para la bandeja del staff
+// ============================================================
+//
+// Agrupa los estados desde el punto de vista del staff:
+//  - unassigned: legajos sin assigned_officer_id
+//  - action_worcap: necesitan que WORCAP haga algo
+//  - waiting_client: esperando acción del cliente
+//  - closed: legajo terminado (aprobado, rechazado, cancelado)
+
+export const STAFF_BUCKETS = [
+  "unassigned",
+  "action_worcap",
+  "waiting_client",
+  "closed",
+] as const
+export type StaffBucket = (typeof STAFF_BUCKETS)[number]
+
+export const STAFF_BUCKET_LABELS: Record<StaffBucket, string> = {
+  unassigned: "Sin asignar",
+  action_worcap: "Acción WORCAP",
+  waiting_client: "Esperando cliente",
+  closed: "Cerrados",
+}
+
+export const STAFF_BUCKET_DESCRIPTIONS: Record<StaffBucket, string> = {
+  unassigned: "Legajos nuevos sin oficial asignado",
+  action_worcap: "Hay algo para hacer del lado de WORCAP",
+  waiting_client: "Estamos esperando que el cliente actúe",
+  closed: "Legajos finalizados (aprobados, rechazados o cancelados)",
+}
+
+/**
+ * Dado el estado y la asignación de un legajo, devuelve el bucket
+ * de UX desde el punto de vista del staff.
+ */
+export function getStaffBucket(
+  status: ApplicationStatus,
+  hasAssignedOfficer: boolean
+): StaffBucket {
+  // Estados finales = cerrado (incluso si no estaba asignado)
+  if (isFinalStatus(status)) {
+    return "closed"
+  }
+
+  // Sin oficial asignado y no cerrado = sin asignar
+  if (!hasAssignedOfficer) {
+    return "unassigned"
+  }
+
+  // Estados donde el balón está en WORCAP
+  const actionWorcapStatuses: ApplicationStatus[] = [
+    "submitted",
+    "pending_authorization",
+    "authorized",
+    "docs_in_review",
+    "additional_docs_review",
+    "in_risk_analysis",
+    "observed",
+  ]
+  if (actionWorcapStatuses.includes(status)) {
+    return "action_worcap"
+  }
+
+  // El resto = esperando cliente (draft, docs_requested, awaiting_funding_line_choice, additional_docs_pending)
+  return "waiting_client"
+}
+
+/**
+ * Color visual para cada bucket de staff. Para badges y filtros.
+ */
+export const STAFF_BUCKET_COLORS: Record
+  StaffBucket,
+  { bg: string; text: string; border: string; dot: string }
+> = {
+  unassigned: {
+    bg: "bg-gray-100",
+    text: "text-gray-700",
+    border: "border-gray-200",
+    dot: "bg-gray-400",
+  },
+  action_worcap: {
+    bg: "bg-blue-50",
+    text: "text-blue-700",
+    border: "border-blue-200",
+    dot: "bg-[#1b38e8]",
+  },
+  waiting_client: {
+    bg: "bg-amber-50",
+    text: "text-amber-700",
+    border: "border-amber-200",
+    dot: "bg-amber-500",
+  },
+  closed: {
+    bg: "bg-gray-50",
+    text: "text-gray-500",
+    border: "border-gray-200",
+    dot: "bg-gray-300",
+  },
 }
