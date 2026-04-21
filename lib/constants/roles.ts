@@ -79,18 +79,18 @@ export type ApplicationStatus = (typeof APPLICATION_STATUSES)[number]
 
 export const APPLICATION_STATUS_LABELS: Record<ApplicationStatus, string> = {
   draft: "Borrador",
-  submitted: "Enviado",
-  pending_authorization: "Pendiente de autorización",
-  authorized: "Autorizado",
-  rejected_by_officer: "Rechazado por oficial",
-  docs_in_review: "Documentación en revisión",
-  docs_requested: "Documentación solicitada",
-  in_risk_analysis: "En análisis de riesgo",
-  observed: "Observado",
-  approved: "Aprobado",
-  rejected_by_analyst: "Rechazado por analista",
-  cancelled_by_client: "Cancelado por el cliente",
-  cancelled_by_worcap: "Cancelado por WORCAP",
+  submitted: "Pendiente de recepción",
+  pending_authorization: "Pendiente de recepción",
+  authorized: "En análisis",
+  docs_in_review: "En análisis",
+  docs_requested: "Solicitud de documentación adicional",
+  in_risk_analysis: "En comité",
+  observed: "En comité",
+  approved: "Finalizada — Aprobada",
+  rejected_by_officer: "Finalizada — Rechazada",
+  rejected_by_analyst: "Finalizada — Rechazada",
+  cancelled_by_client: "Cancelada por vos",
+  cancelled_by_worcap: "Cancelada por WORCAP",
 }
 
 /**
