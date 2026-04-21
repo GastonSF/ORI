@@ -11,6 +11,9 @@ import {
   XCircle,
   Ban,
   ArrowRight,
+  GitBranch,
+  UploadCloud,
+  ScanLine,
 } from "lucide-react"
 import {
   getStatusBucket,
@@ -29,6 +32,7 @@ type Props = {
     submitted_at: string | null
   } | null
   docsPending: number // cuántos docs requeridos aún faltan subir
+  additionalDocsPending?: number // cuántos docs adicionales aún faltan subir (fase 5)
 }
 
 type HeroVariant = {
@@ -52,6 +56,7 @@ export function DashboardHero({
   onboardingStep,
   activeApp,
   docsPending,
+  additionalDocsPending = 0,
 }: Props) {
   const variant = pickVariant({
     clientName,
@@ -60,6 +65,7 @@ export function DashboardHero({
     onboardingStep,
     activeApp,
     docsPending,
+    additionalDocsPending,
   })
 
   const Icon = variant.icon
@@ -119,8 +125,7 @@ const TONE_STYLES = {
     iconColor: "text-[#1b38e8]",
     title: "text-gray-900",
     description: "text-gray-700",
-    primaryButton:
-      "bg-[#1b38e8] text-white hover:bg-[#1730c4]",
+    primaryButton: "bg-[#1b38e8] text-white hover:bg-[#1730c4]",
     secondaryButton:
       "bg-white border-gray-300 text-gray-700 hover:bg-gray-50",
   },
@@ -130,8 +135,7 @@ const TONE_STYLES = {
     iconColor: "text-white",
     title: "text-gray-900",
     description: "text-gray-700",
-    primaryButton:
-      "bg-[#1b38e8] text-white hover:bg-[#1730c4]",
+    primaryButton: "bg-[#1b38e8] text-white hover:bg-[#1730c4]",
     secondaryButton:
       "bg-white border-gray-300 text-gray-700 hover:bg-gray-50",
   },
@@ -141,8 +145,7 @@ const TONE_STYLES = {
     iconColor: "text-amber-700",
     title: "text-amber-900",
     description: "text-amber-800",
-    primaryButton:
-      "bg-amber-600 text-white hover:bg-amber-700",
+    primaryButton: "bg-amber-600 text-white hover:bg-amber-700",
     secondaryButton:
       "bg-white border-amber-300 text-amber-800 hover:bg-amber-50",
   },
@@ -152,8 +155,7 @@ const TONE_STYLES = {
     iconColor: "text-green-700",
     title: "text-green-900",
     description: "text-green-800",
-    primaryButton:
-      "bg-green-600 text-white hover:bg-green-700",
+    primaryButton: "bg-green-600 text-white hover:bg-green-700",
     secondaryButton:
       "bg-white border-green-300 text-green-800 hover:bg-green-50",
   },
@@ -173,8 +175,7 @@ const TONE_STYLES = {
     iconColor: "text-gray-600",
     title: "text-gray-900",
     description: "text-gray-600",
-    primaryButton:
-      "bg-gray-700 text-white hover:bg-gray-800",
+    primaryButton: "bg-gray-700 text-white hover:bg-gray-800",
     secondaryButton:
       "bg-white border-gray-300 text-gray-700 hover:bg-gray-50",
   },
@@ -187,6 +188,7 @@ function pickVariant({
   onboardingStep,
   activeApp,
   docsPending,
+  additionalDocsPending,
 }: Props): HeroVariant {
   // CASO 1: Sin empresa cargada
   if (!hasClient) {
@@ -268,14 +270,14 @@ function pickVariant({
     }
   }
 
-  // CASO 6: En análisis (el oficial está laburando)
+  // CASO 6: En análisis inicial (el oficial/analista está revisando docs iniciales)
   if (bucket === "in_analysis") {
     return {
       tone: "info",
       icon: FileSearch,
       title: `Estamos analizando tu ${legajoStr}`,
       description:
-        "Un oficial de WORCAP está revisando tu documentación. Si necesitamos algo más, te vamos a avisar desde acá.",
+        "Un analista de WORCAP está revisando tu documentación inicial. Te avisaremos cuando termine para que elijas tu línea de fondeo.",
       cta: { label: "Ver detalle", href: "/cliente/solicitud" },
     }
   }
@@ -287,24 +289,70 @@ function pickVariant({
       icon: AlertTriangle,
       title: "WORCAP te pidió documentación adicional",
       description:
-        "Un oficial revisó tu solicitud y necesita info extra para continuar. Ingresá a los detalles para ver qué falta.",
+        "Un analista revisó tu solicitud y necesita info extra para continuar. Ingresá a los detalles para ver qué falta.",
       cta: { label: "Ver qué falta", href: "/cliente/solicitud" },
     }
   }
 
-  // CASO 8: En comité
-  if (bucket === "in_committee") {
+  // CASO 8 (NUEVO): Análisis inicial OK — elegí tu línea de fondeo
+  if (bucket === "awaiting_funding_line_choice") {
+    return {
+      tone: "action",
+      icon: GitBranch,
+      title: "¡Elegí tu línea de fondeo!",
+      description:
+        "Tu documentación inicial fue aprobada. Ahora elegí la línea que mejor se ajuste a tu empresa para continuar con el análisis.",
+      cta: { label: "Elegir línea", href: "/cliente/eleccion-linea" },
+      secondaryCta: { label: "Ver detalle", href: "/cliente/solicitud" },
+    }
+  }
+
+  // CASO 9 (NUEVO): Subir documentación adicional
+  if (bucket === "additional_docs_pending") {
+    const count = additionalDocsPending
+    const title = count > 0
+      ? `Subí tu documentación adicional`
+      : `Completá tu documentación adicional`
+    const description = count === 1
+      ? "Te falta 1 documento para que WORCAP pueda avanzar con el análisis económico-financiero."
+      : count > 1
+      ? `Te faltan ${count} documentos para que WORCAP pueda avanzar con el análisis económico-financiero.`
+      : "WORCAP está esperando tu documentación específica de la línea elegida para continuar."
+    return {
+      tone: "warning",
+      icon: UploadCloud,
+      title,
+      description,
+      cta: { label: "Ir a documentación", href: "/cliente/documentos" },
+      secondaryCta: { label: "Ver detalle", href: "/cliente/solicitud" },
+    }
+  }
+
+  // CASO 10 (NUEVO): Revisión económico-financiera (analista revisando docs adicionales)
+  if (bucket === "additional_docs_review") {
+    return {
+      tone: "info",
+      icon: ScanLine,
+      title: `Estamos revisando tu documentación adicional`,
+      description:
+        "Un analista está revisando los documentos económico-financieros que enviaste. Si falta algo, te vamos a avisar desde acá.",
+      cta: { label: "Ver detalle", href: "/cliente/solicitud" },
+    }
+  }
+
+  // CASO 11: En análisis crediticio (el análisis final con dictamen)
+  if (bucket === "in_credit_analysis") {
     return {
       tone: "info",
       icon: Users,
-      title: `Tu ${legajoStr} está en comité de riesgo`,
+      title: `Tu ${legajoStr} está en análisis crediticio`,
       description:
         "El área de riesgo está evaluando tu solicitud. Es el último paso antes de la decisión final.",
       cta: { label: "Ver detalle", href: "/cliente/solicitud" },
     }
   }
 
-  // CASO 9: Aprobada
+  // CASO 12: Aprobada
   if (bucket === "approved") {
     return {
       tone: "success",
@@ -316,7 +364,7 @@ function pickVariant({
     }
   }
 
-  // CASO 10: Rechazada
+  // CASO 13: Rechazada
   if (bucket === "rejected") {
     return {
       tone: "error",
@@ -328,7 +376,7 @@ function pickVariant({
     }
   }
 
-  // CASO 11: Cancelada
+  // CASO 14: Cancelada
   if (bucket === "cancelled") {
     return {
       tone: "neutral",
