@@ -1,9 +1,22 @@
 "use client"
 
-import { useRef, useState, useTransition } from "react"
-import { CheckCircle2, Eye, Loader2, Trash2, Upload, XCircle, AlertCircle } from "lucide-react"
+import { useRef, useState } from "react"
+import { useRouter } from "next/navigation"
+import {
+  CheckCircle2,
+  Eye,
+  Loader2,
+  Trash2,
+  Upload,
+  XCircle,
+  AlertCircle,
+} from "lucide-react"
 import type { DocumentType } from "@/lib/constants/roles"
-import { uploadDocumentAction, deleteDocumentAction } from "@/lib/actions/documents"
+import {
+  prepareDocumentUploadAction,
+  confirmDocumentUploadAction,
+  deleteDocumentAction,
+} from "@/lib/actions/documents"
 import { DOCUMENT_STATUS_LABELS, type DocumentStatus } from "@/lib/constants/roles"
 import { DocumentPreviewModal } from "@/components/cliente/document-preview-modal"
 
@@ -23,26 +36,45 @@ type Props = {
   existingDoc: ExistingDoc
 }
 
-export function DocumentRow({ docType, label, applicationId, clientId, existingDoc }: Props) {
+// Debe coincidir con MAX_FILE_SIZE_BYTES del server (25 MB)
+const MAX_SIZE_MB = 25
+const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024
+
+export function DocumentRow({
+  docType,
+  label,
+  applicationId,
+  clientId,
+  existingDoc,
+}: Props) {
+  const router = useRouter()
   const inputRef = useRef<HTMLInputElement>(null)
-  const [pending, startTransition] = useTransition()
+  const [uploading, setUploading] = useState(false)
+  const [progress, setProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
+
     setError(null)
 
-    if (file.size > 25 * 1024 * 1024) {
-      setError("El archivo supera los 25 MB")
+    // Validación local antes del upload
+    if (file.size > MAX_SIZE_BYTES) {
+      const mbFile = (file.size / 1024 / 1024).toFixed(1)
+      setError(
+        `Este archivo pesa ${mbFile} MB. El máximo permitido es ${MAX_SIZE_MB} MB. Reducilo o comprimilo antes de subir (podés usar smallpdf.com o ilovepdf.com).`
+      )
+      if (inputRef.current) inputRef.current.value = ""
       return
     }
 
-    const formData = new FormData()
-    formData.append("file", file)
-    formData.append(
-      "metadata",
-      JSON.stringify({
+    setUploading(true)
+    setProgress(0)
+
+    try {
+      // PASO 1: pedir URL firmada al servidor
+      const prep = await prepareDocumentUploadAction({
         application_id: applicationId,
         client_id: clientId,
         document_type: docType,
@@ -50,23 +82,65 @@ export function DocumentRow({ docType, label, applicationId, clientId, existingD
         file_size_bytes: file.size,
         mime_type: file.type || "application/octet-stream",
       })
-    )
 
-    startTransition(async () => {
-      const result = await uploadDocumentAction(formData)
-      if (!result.ok) setError(result.error)
+      if (!prep.ok || !prep.data) {
+        setError(prep.ok ? "Respuesta inesperada del servidor" : prep.error)
+        setUploading(false)
+        if (inputRef.current) inputRef.current.value = ""
+        return
+      }
+
+      // PASO 2: upload directo con XHR para tener progreso
+      await uploadWithProgress(prep.data.upload_url, file, (pct) => setProgress(pct))
+
+      // PASO 3: confirmar en el servidor (registra metadata)
+      const confirm = await confirmDocumentUploadAction({
+        application_id: applicationId,
+        client_id: clientId,
+        document_type: docType,
+        file_path: prep.data.file_path,
+        file_name: file.name,
+        file_size_bytes: file.size,
+        mime_type: file.type || "application/octet-stream",
+      })
+
+      if (!confirm.ok) {
+        setError(confirm.error)
+        setUploading(false)
+        if (inputRef.current) inputRef.current.value = ""
+        return
+      }
+
+      setUploading(false)
+      setProgress(0)
       if (inputRef.current) inputRef.current.value = ""
-    })
+      router.refresh()
+    } catch (e) {
+      setError(
+        e instanceof Error
+          ? `Error de red: ${e.message}`
+          : "Error de red al subir el archivo"
+      )
+      setUploading(false)
+      if (inputRef.current) inputRef.current.value = ""
+    }
   }
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!existingDoc) return
     if (!confirm(`¿Eliminar ${existingDoc.file_name}?`)) return
     setError(null)
-    startTransition(async () => {
+    setUploading(true)
+    try {
       const result = await deleteDocumentAction({ document_id: existingDoc.id })
-      if (!result.ok) setError(result.error)
-    })
+      if (!result.ok) {
+        setError(result.error)
+      } else {
+        router.refresh()
+      }
+    } finally {
+      setUploading(false)
+    }
   }
 
   const status = (existingDoc?.status ?? "pending") as DocumentStatus
@@ -88,7 +162,9 @@ export function DocumentRow({ docType, label, applicationId, clientId, existingD
                 {existingDoc.file_name}
               </DocumentPreviewModal>
               {existingDoc.file_size_bytes && (
-                <span className="shrink-0">· {formatBytes(existingDoc.file_size_bytes)}</span>
+                <span className="shrink-0">
+                  · {formatBytes(existingDoc.file_size_bytes)}
+                </span>
               )}
               <StatusBadge status={status} />
             </div>
@@ -113,7 +189,7 @@ export function DocumentRow({ docType, label, applicationId, clientId, existingD
                   <button
                     type="button"
                     onClick={() => inputRef.current?.click()}
-                    disabled={pending}
+                    disabled={uploading}
                     className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                   >
                     Reemplazar
@@ -121,7 +197,7 @@ export function DocumentRow({ docType, label, applicationId, clientId, existingD
                   <button
                     type="button"
                     onClick={handleDelete}
-                    disabled={pending}
+                    disabled={uploading}
                     className="rounded-md border border-gray-300 bg-white p-1.5 text-gray-400 hover:text-red-600 hover:border-red-200 disabled:opacity-50"
                     aria-label="Eliminar"
                   >
@@ -134,12 +210,13 @@ export function DocumentRow({ docType, label, applicationId, clientId, existingD
             <button
               type="button"
               onClick={() => inputRef.current?.click()}
-              disabled={pending}
+              disabled={uploading}
               className="inline-flex items-center gap-1.5 rounded-md bg-[#1b38e8] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#1730c4] disabled:opacity-50"
             >
-              {pending ? (
+              {uploading ? (
                 <>
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Subiendo...
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  {progress > 0 ? `${progress}%` : "Subiendo..."}
                 </>
               ) : (
                 <>
@@ -158,6 +235,21 @@ export function DocumentRow({ docType, label, applicationId, clientId, existingD
         </div>
       </div>
 
+      {/* Progress bar durante upload */}
+      {uploading && progress > 0 && progress < 100 && (
+        <div className="mt-3">
+          <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-[#1b38e8] transition-all duration-150"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+          <p className="mt-1 text-[10px] text-gray-500">
+            Subiendo archivo... {progress}%
+          </p>
+        </div>
+      )}
+
       {error && (
         <div className="mt-3 rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-700">
           {error}
@@ -165,6 +257,48 @@ export function DocumentRow({ docType, label, applicationId, clientId, existingD
       )}
     </li>
   )
+}
+
+/**
+ * Upload con XMLHttpRequest para obtener progreso real.
+ * fetch() no expone progress events en el navegador, XHR sí.
+ */
+function uploadWithProgress(
+  url: string,
+  file: File,
+  onProgress: (pct: number) => void
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open("PUT", url, true)
+    xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream")
+
+    xhr.upload.addEventListener("progress", (e) => {
+      if (e.lengthComputable) {
+        const pct = Math.round((e.loaded / e.total) * 100)
+        onProgress(pct)
+      }
+    })
+
+    xhr.addEventListener("load", () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        onProgress(100)
+        resolve()
+      } else {
+        reject(new Error(`Upload falló con status ${xhr.status}: ${xhr.responseText}`))
+      }
+    })
+
+    xhr.addEventListener("error", () => {
+      reject(new Error("Error de red durante el upload"))
+    })
+
+    xhr.addEventListener("abort", () => {
+      reject(new Error("Upload cancelado"))
+    })
+
+    xhr.send(file)
+  })
 }
 
 function StatusIcon({ status, hasDoc }: { status: DocumentStatus; hasDoc: boolean }) {
@@ -204,7 +338,9 @@ function StatusBadge({ status }: { status: DocumentStatus }) {
     rejected: "bg-red-50 text-red-700",
   }
   return (
-    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${styles[status]}`}>
+    <span
+      className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${styles[status]}`}
+    >
       {DOCUMENT_STATUS_LABELS[status]}
     </span>
   )
