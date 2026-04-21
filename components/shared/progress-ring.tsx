@@ -18,8 +18,6 @@ type Props = {
   strokeWidth?: number
   color?: string
   trackColor?: string
-  // Si el anillo llega al 100%, cambia a verde salvo que `color` esté forzado
-  completeColor?: string
 }
 
 export function ProgressRing({
@@ -27,18 +25,14 @@ export function ProgressRing({
   total,
   label,
   sublabel,
-  size = 128,
+  size = 140,
   strokeWidth = 10,
   color = "#1b38e8",
   trackColor = "#e5e7eb",
-  completeColor = "#16a34a",
 }: Props) {
   const safeTotal = Math.max(total, 1)
   const clampedValue = Math.max(0, Math.min(value, safeTotal))
   const pct = Math.round((clampedValue / safeTotal) * 100)
-  const isComplete = pct >= 100
-
-  const strokeColor = isComplete ? completeColor : color
 
   // Cálculo del arco
   const radius = (size - strokeWidth) / 2
@@ -46,7 +40,7 @@ export function ProgressRing({
   const dashOffset = circumference - (pct / 100) * circumference
 
   return (
-    <div className="flex flex-col items-center gap-2">
+    <div className="flex flex-col items-center gap-3">
       <div className="relative" style={{ width: size, height: size }}>
         <svg
           width={size}
@@ -70,27 +64,27 @@ export function ProgressRing({
             cy={size / 2}
             r={radius}
             fill="none"
-            stroke={strokeColor}
+            stroke={color}
             strokeWidth={strokeWidth}
             strokeLinecap="round"
             strokeDasharray={circumference}
             strokeDashoffset={dashOffset}
             style={{
-              transition: "stroke-dashoffset 0.6s ease-out, stroke 0.3s ease",
+              transition: "stroke-dashoffset 0.6s ease-out",
             }}
           />
         </svg>
 
         {/* Texto centrado */}
-        <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <div className="absolute inset-0 flex flex-col items-center justify-center px-4">
           <span
-            className="text-2xl font-bold tabular-nums"
-            style={{ color: strokeColor }}
+            className="text-xl font-bold tabular-nums leading-none"
+            style={{ color }}
           >
             {pct}%
           </span>
           {sublabel && (
-            <span className="text-xs text-gray-500 mt-0.5 tabular-nums">
+            <span className="text-[11px] text-gray-500 mt-1.5 tabular-nums text-center leading-tight">
               {sublabel}
             </span>
           )}

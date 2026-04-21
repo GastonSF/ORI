@@ -7,7 +7,7 @@ import {
   REQUIRED_DOCS_BY_CLIENT_TYPE,
   isFinalStatus,
 } from "@/lib/constants/roles"
-import { ArrowRight, FileText, Building2, Upload } from "lucide-react"
+import { ArrowRight, FileText, Building2 } from "lucide-react"
 import { ProgressRing } from "@/components/shared/progress-ring"
 
 export default async function ClientDashboard() {
@@ -74,34 +74,6 @@ export default async function ClientDashboard() {
           Desde acá gestionás tu solicitud de crédito en WORCAP.
         </p>
       </header>
-
-      {/* Anillos de progreso (solo cuando hay cliente) */}
-      {client && (
-        <section className="mb-6 rounded-lg border border-gray-200 bg-white p-6">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex justify-center">
-              <ProgressRing
-                value={onboardingStep}
-                total={totalOnboardingSteps}
-                label="Onboarding"
-                sublabel={`${onboardingStep} de ${totalOnboardingSteps} pasos`}
-              />
-            </div>
-            <div className="flex justify-center">
-              <ProgressRing
-                value={uploadedDocsCount}
-                total={totalDocsRequired}
-                label="Documentación"
-                sublabel={
-                  totalDocsRequired > 0
-                    ? `${uploadedDocsCount} de ${totalDocsRequired} documentos`
-                    : "Sin requisitos aún"
-                }
-              />
-            </div>
-          </div>
-        </section>
-      )}
 
       {/* CASO 1: Sin perfil de empresa cargado aún */}
       {!client && (
@@ -212,25 +184,32 @@ export default async function ClientDashboard() {
             )}
           </div>
 
-          {/* Card de documentación */}
+          {/* Card de progreso (anillos) - solo si hay legajo activo */}
           {activeApp && !isFinalStatus(activeApp.status) && (
             <div className="rounded-lg border border-gray-200 bg-white p-6 md:col-span-2">
-              <div className="flex items-start gap-4">
-                <div className="h-10 w-10 rounded-md bg-blue-50 text-[#1b38e8] grid place-items-center shrink-0">
-                  <Upload className="h-5 w-5" />
+              <p className="text-xs uppercase tracking-wider text-gray-500 mb-4">
+                Tu progreso
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div className="flex justify-center">
+                  <ProgressRing
+                    value={onboardingStep}
+                    total={totalOnboardingSteps}
+                    label="Onboarding"
+                    sublabel={`${onboardingStep} de ${totalOnboardingSteps} pasos`}
+                  />
                 </div>
-                <div className="flex-1">
-                  <h3 className="font-semibold text-gray-900">Documentación</h3>
-                  <p className="mt-1 text-sm text-gray-600">
-                    Subí los documentos requeridos para avanzar con tu solicitud.
-                  </p>
-                  <Link
-                    href="/cliente/documentos"
-                    className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-[#1b38e8] hover:underline"
-                  >
-                    Ir a documentación
-                    <ArrowRight className="h-4 w-4" />
-                  </Link>
+                <div className="flex justify-center">
+                  <ProgressRing
+                    value={uploadedDocsCount}
+                    total={totalDocsRequired}
+                    label="Documentación"
+                    sublabel={
+                      totalDocsRequired > 0
+                        ? `${uploadedDocsCount} de ${totalDocsRequired} documentos`
+                        : "Sin requisitos aún"
+                    }
+                  />
                 </div>
               </div>
             </div>
