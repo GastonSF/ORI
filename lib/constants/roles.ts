@@ -538,17 +538,14 @@ export function getStaffBucket(
   status: ApplicationStatus,
   hasAssignedOfficer: boolean
 ): StaffBucket {
-  // Estados finales = cerrado (incluso si no estaba asignado)
   if (isFinalStatus(status)) {
     return "closed"
   }
 
-  // Sin oficial asignado y no cerrado = sin asignar
   if (!hasAssignedOfficer) {
     return "unassigned"
   }
 
-  // Estados donde el balón está en WORCAP
   const actionWorcapStatuses: ApplicationStatus[] = [
     "submitted",
     "pending_authorization",
@@ -562,17 +559,20 @@ export function getStaffBucket(
     return "action_worcap"
   }
 
-  // El resto = esperando cliente (draft, docs_requested, awaiting_funding_line_choice, additional_docs_pending)
   return "waiting_client"
 }
 
 /**
  * Color visual para cada bucket de staff. Para badges y filtros.
  */
-export const STAFF_BUCKET_COLORS: Record
-  StaffBucket,
-  { bg: string; text: string; border: string; dot: string }
-> = {
+export type StaffBucketColor = {
+  bg: string
+  text: string
+  border: string
+  dot: string
+}
+
+export const STAFF_BUCKET_COLORS: Record<StaffBucket, StaffBucketColor> = {
   unassigned: {
     bg: "bg-gray-100",
     text: "text-gray-700",
