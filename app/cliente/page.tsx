@@ -127,27 +127,7 @@ export default async function ClientDashboard() {
         </section>
       )}
 
-      {/* 2. HERO - acción a tomar (después del contexto) */}
-      <DashboardHero
-        clientName={firstName}
-        hasClient={!!client}
-        onboardingCompleted={client?.onboarding_completed ?? false}
-        onboardingStep={client?.onboarding_step ?? 0}
-        activeApp={
-          displayedApp
-            ? {
-                id: displayedApp.id,
-                application_number: displayedApp.application_number,
-                status: displayedApp.status,
-                submitted_at: displayedApp.submitted_at,
-              }
-            : null
-        }
-        docsPending={docsPending}
-        additionalDocsPending={additionalDocsPending}
-      />
-
-      {/* 3. DATOS DE LA EMPRESA (solo si hay cliente) */}
+      {/* 2. DATOS DE LA EMPRESA (solo si hay cliente) */}
       {client && (
         <section className="rounded-xl border border-gray-200 bg-white p-6">
           <div className="flex items-center justify-between mb-4">
@@ -186,6 +166,26 @@ export default async function ClientDashboard() {
           </dl>
         </section>
       )}
+
+      {/* 3. HERO - acción a tomar (después del contexto y los datos) */}
+      <DashboardHero
+        clientName={firstName}
+        hasClient={!!client}
+        onboardingCompleted={client?.onboarding_completed ?? false}
+        onboardingStep={client?.onboarding_step ?? 0}
+        activeApp={
+          displayedApp
+            ? {
+                id: displayedApp.id,
+                application_number: displayedApp.application_number,
+                status: displayedApp.status,
+                submitted_at: displayedApp.submitted_at,
+              }
+            : null
+        }
+        docsPending={docsPending}
+        additionalDocsPending={additionalDocsPending}
+      />
 
       {/* 4. PROGRESO - dos modos: completo (linea chica) o en curso (anillos) */}
       {client && displayedApp && !isFinalStatus(displayedApp.status) && (
