@@ -4,9 +4,11 @@ import { requireRole } from "@/lib/auth/session"
 import {
   APPLICATION_STATUS_LABELS,
   CLIENT_TYPE_LABELS,
+  REQUIRED_DOCS_BY_CLIENT_TYPE,
   isFinalStatus,
 } from "@/lib/constants/roles"
 import { ArrowRight, FileText, Building2, Upload } from "lucide-react"
+import { ProgressRing } from "@/components/shared/progress-ring"
 
 export default async function ClientDashboard() {
   const { user, profile } = await requireRole("client")
@@ -32,6 +34,36 @@ export default async function ClientDashboard() {
         .maybeSingle()
     : { data: null }
 
+  // Contar documentos subidos vs requeridos (para el anillo de documentación)
+  const requiredDocs = client
+    ? REQUIRED_DOCS_BY_CLIENT_TYPE[client.client_type] ?? []
+    : []
+  const totalDocsRequired = requiredDocs.length
+
+  let uploadedDocsCount = 0
+  if (activeApp && requiredDocs.length > 0) {
+    const { data: uploadedDocs } = await supabase
+      .from("documents")
+      .select("document_type")
+      .eq("application_id", activeApp.id)
+
+    if (uploadedDocs) {
+      // Contar únicos por document_type que estén en el listado de requeridos
+      const uniqueTypes = new Set(
+        uploadedDocs
+          .map((d) => d.document_type)
+          .filter((t) => requiredDocs.includes(t))
+      )
+      uploadedDocsCount = uniqueTypes.size
+    }
+  }
+
+  // Progreso del onboarding: step actual (1..5) ó 5 si está completado
+  const onboardingStep = client?.onboarding_completed
+    ? 5
+    : client?.onboarding_step ?? 0
+  const totalOnboardingSteps = 5
+
   return (
     <div className="max-w-5xl mx-auto">
       <header className="mb-8">
@@ -42,6 +74,34 @@ export default async function ClientDashboard() {
           Desde acá gestionás tu solicitud de crédito en WORCAP.
         </p>
       </header>
+
+      {/* Anillos de progreso (solo cuando hay cliente) */}
+      {client && (
+        <section className="mb-6 rounded-lg border border-gray-200 bg-white p-6">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="flex justify-center">
+              <ProgressRing
+                value={onboardingStep}
+                total={totalOnboardingSteps}
+                label="Onboarding"
+                sublabel={`${onboardingStep} de ${totalOnboardingSteps} pasos`}
+              />
+            </div>
+            <div className="flex justify-center">
+              <ProgressRing
+                value={uploadedDocsCount}
+                total={totalDocsRequired}
+                label="Documentación"
+                sublabel={
+                  totalDocsRequired > 0
+                    ? `${uploadedDocsCount} de ${totalDocsRequired} documentos`
+                    : "Sin requisitos aún"
+                }
+              />
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* CASO 1: Sin perfil de empresa cargado aún */}
       {!client && (
