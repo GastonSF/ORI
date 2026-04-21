@@ -1,6 +1,7 @@
 "use server"
 
 import { createClient } from "@/lib/supabase/server"
+import { headers } from "next/headers"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { redirect } from "next/navigation"
 import { revalidatePath } from "next/cache"
@@ -86,7 +87,7 @@ export async function registerClientAction(
   }
 
   const supabase = await createClient()
-  const origin = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"
+  const origin = await getOrigin()
 
   const { data, error } = await supabase.auth.signUp({
     email: parsed.data.email,
@@ -139,7 +140,7 @@ export async function forgotPasswordAction(
   }
 
   const supabase = await createClient()
-  const origin = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"
+  const origin = await getOrigin()
 
   const { error } = await supabase.auth.resetPasswordForEmail(parsed.data.email, {
     redirectTo: `${origin}/reset-password`,
@@ -225,7 +226,7 @@ export async function inviteInternalUserAction(input: {
 
   // Crear usuario con service_role
   const admin = createAdminClient()
-  const origin = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"
+  const origin = await getOrigin()
 
   const { data, error } = await admin.auth.admin.inviteUserByEmail(input.email, {
     redirectTo: `${origin}/reset-password`,
@@ -258,3 +259,22 @@ function mapAuthError(message?: string): string | null {
   if (m.includes("rate limit")) return "Demasiados intentos. Esperá unos minutos."
   return null
 }
+
+// Helper: deriva la URL base desde los headers del request.
+// Prioridad: NEXT_PUBLIC_SITE_URL > x-forwarded-host/proto > host header > localhost fallback.
+// Esto hace que los redirects de auth funcionen sin depender de env vars bien configuradas.
+async function getOrigin(): Promise<string> {
+  if (process.env.NEXT_PUBLIC_SITE_URL) {
+    return process.env.NEXT_PUBLIC_SITE_URL.replace(/\/$/, "")
+  }
+  try {
+    const h = await headers()
+    const host = h.get("x-forwarded-host") ?? h.get("host")
+    const proto = h.get("x-forwarded-proto") ?? (host?.startsWith("localhost") ? "http" : "https")
+    if (host) return `${proto}://${host}`
+  } catch {
+    // no-op: fuera de contexto de request
+  }
+  return "http://localhost:3000"
+}
+
