@@ -47,7 +47,12 @@ export function StepClientType({ client, onDone }: Props) {
   }
 
   return (
-    <div>
+    <form
+      onSubmit={(e) => {
+        e.preventDefault()
+        handleContinue()
+      }}
+    >
       <h2 className="text-xl font-semibold text-gray-900">Seleccioná el tipo de cliente</h2>
       <p className="mt-1 text-sm text-gray-600">
         Esto determina qué documentación vas a necesitar cargar.
@@ -93,9 +98,8 @@ export function StepClientType({ client, onDone }: Props) {
 
       <div className="mt-8 flex justify-end">
         <button
-          type="button"
+          type="submit"
           disabled={!selected || pending}
-          onClick={handleContinue}
           className="rounded-md bg-[#1b38e8] px-5 py-2 text-sm font-semibold text-white hover:bg-[#1730c4] disabled:opacity-50"
         >
           {pending ? (
@@ -107,6 +111,6 @@ export function StepClientType({ client, onDone }: Props) {
           )}
         </button>
       </div>
-    </div>
+    </form>
   )
 }

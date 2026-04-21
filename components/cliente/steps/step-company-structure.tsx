@@ -77,7 +77,12 @@ export function StepCompanyStructure({ client, members, onDone }: Props) {
   }
 
   return (
-    <div>
+    <form
+      onSubmit={(e) => {
+        e.preventDefault()
+        handleSubmit()
+      }}
+    >
       <h2 className="text-xl font-semibold text-gray-900">Estructura societaria</h2>
       <p className="mt-1 text-sm text-gray-600">
         {requiresStructure
@@ -173,9 +178,8 @@ export function StepCompanyStructure({ client, members, onDone }: Props) {
 
       <div className="mt-8 flex justify-end">
         <button
-          type="button"
+          type="submit"
           disabled={pending}
-          onClick={handleSubmit}
           className="rounded-md bg-[#1b38e8] px-5 py-2 text-sm font-semibold text-white hover:bg-[#1730c4] disabled:opacity-50"
         >
           {pending ? (
@@ -187,7 +191,7 @@ export function StepCompanyStructure({ client, members, onDone }: Props) {
           )}
         </button>
       </div>
-    </div>
+    </form>
   )
 }
 

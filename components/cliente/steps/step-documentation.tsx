@@ -94,7 +94,19 @@ export function StepDocumentation({
         </p>
         <button
           type="button"
-          onClick={handleContinue}
+          onMouseDown={(e) => {
+            // Usamos onMouseDown para no perder el primer click si el
+            // navegador está procesando un blur de otro elemento.
+            e.preventDefault()
+            if (!pending) handleContinue()
+          }}
+          onKeyDown={(e) => {
+            // Accesibilidad: Enter y Space siguen funcionando.
+            if ((e.key === "Enter" || e.key === " ") && !pending) {
+              e.preventDefault()
+              handleContinue()
+            }
+          }}
           disabled={pending}
           className="rounded-md bg-[#1b38e8] px-5 py-2 text-sm font-semibold text-white hover:bg-[#1730c4] disabled:opacity-50"
         >

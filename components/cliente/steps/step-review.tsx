@@ -122,7 +122,16 @@ export function StepReview({ client, members, uploadedDocTypes = [] }: Props) {
         </p>
         <button
           type="button"
-          onClick={handleSubmit}
+          onMouseDown={(e) => {
+            e.preventDefault()
+            if (!pending) handleSubmit()
+          }}
+          onKeyDown={(e) => {
+            if ((e.key === "Enter" || e.key === " ") && !pending) {
+              e.preventDefault()
+              handleSubmit()
+            }
+          }}
           disabled={pending}
           className="rounded-md bg-[#1b38e8] px-5 py-2 text-sm font-semibold text-white hover:bg-[#1730c4] disabled:opacity-50"
         >
