@@ -56,7 +56,7 @@ export default async function ClientDashboard() {
   // Usamos el activo si existe, sino el último cerrado (para mostrar resultado)
   const displayedApp = activeApp ?? lastClosedApp
 
-  // Conteo de documentos
+  // Conteo de documentos INICIALES
   const requiredDocs = client
     ? REQUIRED_DOCS_BY_CLIENT_TYPE[client.client_type] ?? []
     : []
@@ -68,6 +68,7 @@ export default async function ClientDashboard() {
       .from("documents")
       .select("document_type")
       .eq("application_id", displayedApp.id)
+      .eq("doc_phase", "initial")
 
     if (uploadedDocs) {
       const uniqueTypes = new Set(
@@ -79,6 +80,19 @@ export default async function ClientDashboard() {
     }
   }
   const docsPending = totalDocsRequired - uploadedDocsCount
+
+  // Conteo de documentos ADICIONALES pendientes (fase 5)
+  let additionalDocsPending = 0
+  if (displayedApp) {
+    const { data: addlRequests } = await supabase
+      .from("additional_document_requests")
+      .select("status")
+      .eq("application_id", displayedApp.id)
+      .eq("status", "pending")
+      .eq("is_required", true)
+
+    additionalDocsPending = addlRequests?.length ?? 0
+  }
 
   // Progreso del onboarding
   const onboardingStep = client?.onboarding_completed
@@ -93,26 +107,7 @@ export default async function ClientDashboard() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
-      {/* 1. HERO - mensaje principal que cambia según estado */}
-      <DashboardHero
-        clientName={firstName}
-        hasClient={!!client}
-        onboardingCompleted={client?.onboarding_completed ?? false}
-        onboardingStep={client?.onboarding_step ?? 0}
-        activeApp={
-          displayedApp
-            ? {
-                id: displayedApp.id,
-                application_number: displayedApp.application_number,
-                status: displayedApp.status,
-                submitted_at: displayedApp.submitted_at,
-              }
-            : null
-        }
-        docsPending={docsPending}
-      />
-
-      {/* 2. TIMELINE - solo si hay legajo (activo o cerrado) */}
+      {/* 1. TIMELINE - contexto primero (solo si hay legajo) */}
       {displayedApp && (
         <section className="rounded-xl border border-gray-200 bg-white p-6">
           <div className="flex items-center justify-between mb-4">
@@ -131,6 +126,26 @@ export default async function ClientDashboard() {
           <ApplicationTimeline status={displayedApp.status} />
         </section>
       )}
+
+      {/* 2. HERO - acción a tomar (después del contexto) */}
+      <DashboardHero
+        clientName={firstName}
+        hasClient={!!client}
+        onboardingCompleted={client?.onboarding_completed ?? false}
+        onboardingStep={client?.onboarding_step ?? 0}
+        activeApp={
+          displayedApp
+            ? {
+                id: displayedApp.id,
+                application_number: displayedApp.application_number,
+                status: displayedApp.status,
+                submitted_at: displayedApp.submitted_at,
+              }
+            : null
+        }
+        docsPending={docsPending}
+        additionalDocsPending={additionalDocsPending}
+      />
 
       {/* 3. DATOS DE LA EMPRESA (solo si hay cliente) */}
       {client && (
