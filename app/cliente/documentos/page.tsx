@@ -60,7 +60,7 @@ export default async function ClientDocumentsPage() {
 
   const { data: documents } = await supabase
     .from("documents")
-    .select("id, document_type, file_name, file_size_bytes, status, review_notes, uploaded_at")
+    .select("id, document_type, file_name, file_size_bytes, mime_type, status, review_notes, uploaded_at")
     .eq("application_id", app.id)
     .order("uploaded_at", { ascending: false })
 

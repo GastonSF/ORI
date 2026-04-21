@@ -1,15 +1,17 @@
 "use client"
 
 import { useRef, useState, useTransition } from "react"
-import { CheckCircle2, Loader2, Trash2, Upload, XCircle, AlertCircle } from "lucide-react"
+import { CheckCircle2, Eye, Loader2, Trash2, Upload, XCircle, AlertCircle } from "lucide-react"
 import type { DocumentType } from "@/lib/constants/roles"
 import { uploadDocumentAction, deleteDocumentAction } from "@/lib/actions/documents"
 import { DOCUMENT_STATUS_LABELS, type DocumentStatus } from "@/lib/constants/roles"
+import { DocumentPreviewModal } from "@/components/cliente/document-preview-modal"
 
 type ExistingDoc = {
   id: string
   file_name: string
   file_size_bytes: number | null
+  mime_type?: string | null
   status: string
 } | null
 
@@ -77,7 +79,14 @@ export function DocumentRow({ docType, label, applicationId, clientId, existingD
           <p className="font-medium text-gray-900 text-sm">{label}</p>
           {existingDoc ? (
             <div className="mt-0.5 flex items-center gap-2 text-xs text-gray-500">
-              <span className="truncate">{existingDoc.file_name}</span>
+              <DocumentPreviewModal
+                documentId={existingDoc.id}
+                fileName={existingDoc.file_name}
+                mimeType={existingDoc.mime_type}
+                triggerClassName="truncate text-[#1b38e8] hover:underline font-medium"
+              >
+                {existingDoc.file_name}
+              </DocumentPreviewModal>
               {existingDoc.file_size_bytes && (
                 <span className="shrink-0">· {formatBytes(existingDoc.file_size_bytes)}</span>
               )}
@@ -90,27 +99,37 @@ export function DocumentRow({ docType, label, applicationId, clientId, existingD
 
         <div className="flex items-center gap-2">
           {existingDoc ? (
-            status !== "approved" && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => inputRef.current?.click()}
-                  disabled={pending}
-                  className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                >
-                  Reemplazar
-                </button>
-                <button
-                  type="button"
-                  onClick={handleDelete}
-                  disabled={pending}
-                  className="rounded-md border border-gray-300 bg-white p-1.5 text-gray-400 hover:text-red-600 hover:border-red-200 disabled:opacity-50"
-                  aria-label="Eliminar"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </>
-            )
+            <>
+              <DocumentPreviewModal
+                documentId={existingDoc.id}
+                fileName={existingDoc.file_name}
+                mimeType={existingDoc.mime_type}
+                triggerClassName="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
+              >
+                <Eye className="h-3.5 w-3.5" /> Ver
+              </DocumentPreviewModal>
+              {status !== "approved" && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => inputRef.current?.click()}
+                    disabled={pending}
+                    className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    Reemplazar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDelete}
+                    disabled={pending}
+                    className="rounded-md border border-gray-300 bg-white p-1.5 text-gray-400 hover:text-red-600 hover:border-red-200 disabled:opacity-50"
+                    aria-label="Eliminar"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </>
+              )}
+            </>
           ) : (
             <button
               type="button"
