@@ -9,11 +9,12 @@ export type ActionResult<T = undefined> =
   | { ok: true; data?: T }
   | { ok: false; error: string; fieldErrors?: Record<string, string[]> }
 
-// El cliente NO define monto, plazo ni destino - eso lo personaliza
-// WORCAP durante el análisis. El legajo se crea "vacío" en estado draft.
-export async function createApplicationAction(): Promise
-  ActionResult<{ application_id: string; application_number: string }>
-> {
+type CreateAppResult = {
+  application_id: string
+  application_number: string
+}
+
+export async function createApplicationAction(): Promise<ActionResult<CreateAppResult>> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { ok: false, error: "No autenticado" }
@@ -51,7 +52,10 @@ export async function createApplicationAction(): Promise
   revalidatePath("/cliente/documentos")
   return {
     ok: true,
-    data: { application_id: newApp.id, application_number: newApp.application_number },
+    data: {
+      application_id: newApp.id,
+      application_number: newApp.application_number,
+    },
   }
 }
 
