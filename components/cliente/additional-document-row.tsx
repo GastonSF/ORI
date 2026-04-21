@@ -8,15 +8,12 @@ import {
   Upload,
   Loader2,
   Trash2,
-  Eye,
-  FileText,
   CircleDashed,
 } from "lucide-react"
 import {
   prepareAdditionalDocumentUploadAction,
   confirmAdditionalDocumentUploadAction,
   deleteAdditionalDocumentAction,
-  getAdditionalDocumentSignedUrlAction,
 } from "@/lib/actions/additional-documents"
 
 type Props = {
@@ -51,11 +48,9 @@ export function AdditionalDocumentRow({
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
-  const [viewing, setViewing] = useState(false)
 
   const isApproved = request.status === "approved"
   const isRejected = request.status === "rejected"
-  const isFulfilled = request.status === "fulfilled" || request.status === "approved"
   const hasFile = !!existingDoc
 
   const onPick = () => fileInputRef.current?.click()
@@ -74,7 +69,6 @@ export function AdditionalDocumentRow({
     setUploading(true)
 
     try {
-      // 1. Pedir signed URL
       const prep = await prepareAdditionalDocumentUploadAction({
         application_id: applicationId,
         request_id: request.id,
@@ -89,7 +83,6 @@ export function AdditionalDocumentRow({
         return
       }
 
-      // 2. Subir directo al storage con la signed URL
       const uploadRes = await fetch(prep.data.upload_url, {
         method: "PUT",
         headers: { "Content-Type": file.type || "application/octet-stream" },
@@ -103,7 +96,6 @@ export function AdditionalDocumentRow({
         return
       }
 
-      // 3. Confirmar
       const confirm = await confirmAdditionalDocumentUploadAction({
         document_id: prep.data.document_id,
         request_id: request.id,
@@ -143,20 +135,7 @@ export function AdditionalDocumentRow({
     router.refresh()
   }
 
-  const onView = async () => {
-    if (!existingDoc) return
-    setViewing(true)
-    setError(null)
-    const res = await getAdditionalDocumentSignedUrlAction(existingDoc.id)
-    setViewing(false)
-    if (!res.ok || !res.data) {
-      setError(res.ok ? "Error" : res.error)
-      return
-    }
-    window.open(res.data.url, "_blank", "noopener,noreferrer")
-  }
-
-  // Visual state del icono
+  // Visual del icono de estado
   let StatusIcon = CircleDashed
   let iconClass = "text-gray-300"
   if (isApproved) {
@@ -207,49 +186,30 @@ export function AdditionalDocumentRow({
                 <>
                   <button
                     type="button"
-                    onClick={onView}
-                    disabled={viewing}
+                    onClick={onPick}
+                    disabled={uploading || deleting}
                     className="inline-flex items-center gap-1 rounded-md border border-gray-300 px-2.5 py-1.5 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                   >
-                    {viewing ? (
+                    {uploading ? (
                       <Loader2 className="h-3 w-3 animate-spin" />
                     ) : (
-                      <Eye className="h-3 w-3" />
+                      <Upload className="h-3 w-3" />
                     )}
-                    Ver
+                    Reemplazar
                   </button>
-                  {!readOnly && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={onPick}
-                        disabled={uploading || deleting}
-                        className="inline-flex items-center gap-1 rounded-md border border-gray-300 px-2.5 py-1.5 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                      >
-                        {uploading ? (
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                        ) : (
-                          <Upload className="h-3 w-3" />
-                        )}
-                        Reemplazar
-                      </button>
-                      <button
-                        type="button"
-                        onClick={onDelete}
-                        disabled={uploading || deleting}
-                        className="inline-flex items-center gap-1 rounded-md border border-red-200 px-2.5 py-1.5 text-xs text-red-700 hover:bg-red-50 disabled:opacity-50"
-                      >
-                        {deleting ? (
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                        ) : (
-                          <Trash2 className="h-3 w-3" />
-                        )}
-                      </button>
-                    </>
-                  )}
+                  <button
+                    type="button"
+                    onClick={onDelete}
+                    disabled={uploading || deleting}
+                    className="inline-flex items-center gap-1 rounded-md border border-red-200 px-2.5 py-1.5 text-xs text-red-700 hover:bg-red-50 disabled:opacity-50"
+                  >
+                    {deleting ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-3 w-3" />
+                    )}
+                  </button>
                 </>
-              ) : readOnly ? (
-                <span className="text-xs text-gray-400 italic">No subido</span>
               ) : (
                 <button
                   type="button"
@@ -292,10 +252,6 @@ export function AdditionalDocumentRow({
         accept="application/pdf,image/jpeg,image/png,image/webp,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         onChange={onFile}
       />
-
-      <div className="hidden">
-        <FileText />
-      </div>
     </li>
   )
 }
