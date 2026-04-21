@@ -453,3 +453,48 @@ function EmptyState({
           <h3 className="text-base font-semibold text-gray-900">
             Todavía no hay legajos en el sistema
           </h3>
+          <p className="mt-1 text-sm text-gray-600">
+            Cuando un cliente envíe su primera solicitud, va a aparecer acá.
+          </p>
+        </>
+      )}
+    </div>
+  )
+}
+
+// ============================================================
+// HELPERS
+// ============================================================
+
+function asUrl(params: SearchParams): string {
+  const sp = new URLSearchParams()
+  if (params.bucket) sp.set("bucket", params.bucket)
+  if (params.asignacion) sp.set("asignacion", params.asignacion)
+  if (params.q) sp.set("q", params.q)
+  const qs = sp.toString()
+  return qs ? `/staff?${qs}` : "/staff"
+}
+
+function timeAgo(dateStr: string): string {
+  const date = new Date(dateStr)
+  const diffMs = Date.now() - date.getTime()
+  const diffMin = Math.floor(diffMs / 60000)
+  const diffHr = Math.floor(diffMin / 60)
+  const diffDay = Math.floor(diffHr / 24)
+  if (diffMin < 1) return "recién"
+  if (diffMin < 60) return `hace ${diffMin} min`
+  if (diffHr < 24) return `hace ${diffHr} h`
+  if (diffDay < 30) return `hace ${diffDay} d`
+  return date.toLocaleDateString("es-AR", {
+    day: "2-digit",
+    month: "short",
+  })
+}
+
+function formatARS(amount: number): string {
+  return new Intl.NumberFormat("es-AR", {
+    style: "currency",
+    currency: "ARS",
+    maximumFractionDigits: 0,
+  }).format(amount)
+}
