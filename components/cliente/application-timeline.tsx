@@ -1,8 +1,10 @@
-import { Check, X, FileWarning } from "lucide-react"
+"use client"
+
+import { Check, X } from "lucide-react"
 import {
+  TIMELINE_STEPS,
   getStatusBucket,
   getTimelineIndex,
-  TIMELINE_STEPS,
   type ApplicationStatus,
 } from "@/lib/constants/roles"
 
@@ -11,67 +13,118 @@ type Props = {
 }
 
 /**
- * Timeline horizontal de 5 pasos del proceso del legajo.
- * Resalta el paso actual según el estado, con colores según éxito/fallo.
+ * Timeline horizontal (desktop) / vertical (mobile) de 8 pasos.
  *
- * Estados especiales:
- *  - docs_requested → muestra "Pendiente de recepción" en amarillo (acción del cliente)
- *  - rejected/cancelled → muestra último paso en rojo con ícono X
- *  - approved → muestra último paso en verde con ícono check
+ * Colores según el paso y el estado global:
+ *  - Paso completado: azul relleno con check
+ *  - Paso actual normal: azul relleno
+ *  - Paso actual en "docs_requested": amarillo (acción urgente del cliente)
+ *  - Paso actual en aprobado: verde
+ *  - Paso actual en rechazado/cancelado: rojo con X
+ *  - Paso futuro: gris outline
  */
 export function ApplicationTimeline({ status }: Props) {
   const bucket = getStatusBucket(status)
   const currentIndex = getTimelineIndex(bucket)
-  const isDocsRequested = bucket === "docs_requested"
-  const isRejected = bucket === "rejected" || bucket === "cancelled"
   const isApproved = bucket === "approved"
-  const isFinal = isRejected || isApproved
+  const isFailed = bucket === "rejected" || bucket === "cancelled"
+  const isDocsRequested = bucket === "docs_requested"
 
   return (
-    <div className="w-full py-2">
-      {/* Versión desktop: horizontal */}
-      <ol className="hidden sm:flex items-start justify-between relative">
-        {/* Línea de fondo que conecta todos los pasos */}
-        <div className="absolute top-4 left-[5%] right-[5%] h-0.5 bg-gray-200 -z-0" />
-
-        {TIMELINE_STEPS.map((step, idx) => {
-          const state = getStepState({
-            idx,
-            currentIndex,
-            isDocsRequested,
-            isRejected,
-            isApproved,
-            isFinal,
-          })
+    <div>
+      {/* Desktop: horizontal */}
+      <ol className="hidden md:flex items-start justify-between relative">
+        {TIMELINE_STEPS.map((step, i) => {
+          const state = getStepState(i, currentIndex, isApproved, isFailed, isDocsRequested)
+          const isLast = i === TIMELINE_STEPS.length - 1
 
           return (
-            <li
-              key={step.bucket}
-              className="flex flex-col items-center gap-2 relative z-10 flex-1"
-            >
-              <StepCircle state={state} index={idx + 1} isLast={idx === TIMELINE_STEPS.length - 1} />
-              <StepLabel state={state} label={step.shortLabel} />
+            <li key={step.bucket} className="flex-1 flex flex-col items-center relative">
+              {/* Línea conectora hacia el siguiente paso */}
+              {!isLast && (
+                <div
+                  className={`absolute top-4 left-1/2 right-0 h-0.5 ${getConnectorColor(
+                    i,
+                    currentIndex,
+                    isApproved,
+                    isFailed
+                  )}`}
+                  style={{ width: "100%", zIndex: 0 }}
+                  aria-hidden
+                />
+              )}
+
+              {/* Círculo del paso */}
+              <div
+                className={`relative z-10 h-8 w-8 rounded-full grid place-items-center text-xs font-semibold ${getStepCircleClasses(
+                  state
+                )}`}
+              >
+                {state === "completed" ? (
+                  <Check className="h-4 w-4" />
+                ) : state === "failed" ? (
+                  <X className="h-4 w-4" />
+                ) : (
+                  i + 1
+                )}
+              </div>
+
+              {/* Label */}
+              <p
+                className={`mt-2 text-[11px] text-center px-1 max-w-[90px] leading-tight ${getStepLabelClasses(
+                  state
+                )}`}
+              >
+                {step.shortLabel}
+              </p>
             </li>
           )
         })}
       </ol>
 
-      {/* Versión mobile: vertical */}
-      <ol className="sm:hidden space-y-3">
-        {TIMELINE_STEPS.map((step, idx) => {
-          const state = getStepState({
-            idx,
-            currentIndex,
-            isDocsRequested,
-            isRejected,
-            isApproved,
-            isFinal,
-          })
+      {/* Mobile: vertical */}
+      <ol className="md:hidden space-y-3">
+        {TIMELINE_STEPS.map((step, i) => {
+          const state = getStepState(i, currentIndex, isApproved, isFailed, isDocsRequested)
+          const isLast = i === TIMELINE_STEPS.length - 1
 
           return (
-            <li key={step.bucket} className="flex items-center gap-3">
-              <StepCircle state={state} index={idx + 1} isLast={idx === TIMELINE_STEPS.length - 1} />
-              <StepLabel state={state} label={step.label} />
+            <li key={step.bucket} className="flex items-start gap-3 relative">
+              {/* Línea vertical conectora */}
+              {!isLast && (
+                <div
+                  className={`absolute left-4 top-8 bottom-0 w-0.5 ${getConnectorColor(
+                    i,
+                    currentIndex,
+                    isApproved,
+                    isFailed
+                  )}`}
+                  style={{ height: "calc(100% - 1rem)" }}
+                  aria-hidden
+                />
+              )}
+
+              {/* Círculo */}
+              <div
+                className={`relative z-10 h-8 w-8 rounded-full grid place-items-center text-xs font-semibold shrink-0 ${getStepCircleClasses(
+                  state
+                )}`}
+              >
+                {state === "completed" ? (
+                  <Check className="h-4 w-4" />
+                ) : state === "failed" ? (
+                  <X className="h-4 w-4" />
+                ) : (
+                  i + 1
+                )}
+              </div>
+
+              {/* Label con más detalle en mobile */}
+              <div className="pt-1">
+                <p className={`text-sm ${getStepLabelClasses(state)}`}>
+                  {step.label}
+                </p>
+              </div>
             </li>
           )
         })}
@@ -80,86 +133,70 @@ export function ApplicationTimeline({ status }: Props) {
   )
 }
 
-type StepState = "done" | "current" | "current-warning" | "current-rejected" | "current-approved" | "pending"
+type StepState = "completed" | "current" | "current-warning" | "current-success" | "failed" | "future"
 
-function getStepState({
-  idx,
-  currentIndex,
-  isDocsRequested,
-  isRejected,
-  isApproved,
-  isFinal,
-}: {
-  idx: number
-  currentIndex: number
+function getStepState(
+  stepIndex: number,
+  currentIndex: number,
+  isApproved: boolean,
+  isFailed: boolean,
   isDocsRequested: boolean
-  isRejected: boolean
-  isApproved: boolean
-  isFinal: boolean
-}): StepState {
-  if (idx < currentIndex) return "done"
-  if (idx > currentIndex) return "pending"
-  // idx === currentIndex (paso actual)
+): StepState {
+  if (stepIndex < currentIndex) return "completed"
+  if (stepIndex > currentIndex) return "future"
+
+  // stepIndex === currentIndex (paso actual)
+  if (isApproved) return "current-success"
+  if (isFailed) return "failed"
   if (isDocsRequested) return "current-warning"
-  if (isFinal) {
-    if (isApproved) return "current-approved"
-    if (isRejected) return "current-rejected"
-  }
   return "current"
 }
 
-function StepCircle({
-  state,
-  index,
-  isLast,
-}: {
-  state: StepState
-  index: number
-  isLast: boolean
-}) {
-  const styles: Record<StepState, { bg: string; text: string; ring: string }> = {
-    done: { bg: "bg-[#1b38e8]", text: "text-white", ring: "" },
-    current: { bg: "bg-[#1b38e8]", text: "text-white", ring: "ring-4 ring-blue-100" },
-    "current-warning": { bg: "bg-amber-500", text: "text-white", ring: "ring-4 ring-amber-100" },
-    "current-rejected": { bg: "bg-red-600", text: "text-white", ring: "ring-4 ring-red-100" },
-    "current-approved": { bg: "bg-green-600", text: "text-white", ring: "ring-4 ring-green-100" },
-    pending: { bg: "bg-white border-2 border-gray-300", text: "text-gray-400", ring: "" },
+function getStepCircleClasses(state: StepState): string {
+  switch (state) {
+    case "completed":
+      return "bg-[#1b38e8] text-white"
+    case "current":
+      return "bg-[#1b38e8] text-white ring-4 ring-blue-100"
+    case "current-warning":
+      return "bg-amber-500 text-white ring-4 ring-amber-100"
+    case "current-success":
+      return "bg-green-600 text-white ring-4 ring-green-100"
+    case "failed":
+      return "bg-red-600 text-white ring-4 ring-red-100"
+    case "future":
+      return "bg-white border border-gray-300 text-gray-400"
   }
-
-  const s = styles[state]
-
-  return (
-    <div
-      className={`h-8 w-8 rounded-full grid place-items-center text-xs font-semibold shrink-0 ${s.bg} ${s.text} ${s.ring}`}
-    >
-      {state === "done" ? (
-        <Check className="h-4 w-4" />
-      ) : state === "current-approved" ? (
-        <Check className="h-4 w-4" />
-      ) : state === "current-rejected" ? (
-        <X className="h-4 w-4" />
-      ) : state === "current-warning" ? (
-        <FileWarning className="h-4 w-4" />
-      ) : (
-        index
-      )}
-    </div>
-  )
 }
 
-function StepLabel({ state, label }: { state: StepState; label: string }) {
-  const colors: Record<StepState, string> = {
-    done: "text-gray-900 font-medium",
-    current: "text-[#1b38e8] font-semibold",
-    "current-warning": "text-amber-700 font-semibold",
-    "current-rejected": "text-red-700 font-semibold",
-    "current-approved": "text-green-700 font-semibold",
-    pending: "text-gray-400",
+function getStepLabelClasses(state: StepState): string {
+  switch (state) {
+    case "completed":
+      return "text-gray-700"
+    case "current":
+      return "text-[#1b38e8] font-semibold"
+    case "current-warning":
+      return "text-amber-700 font-semibold"
+    case "current-success":
+      return "text-green-700 font-semibold"
+    case "failed":
+      return "text-red-700 font-semibold"
+    case "future":
+      return "text-gray-400"
   }
+}
 
-  return (
-    <span className={`text-xs sm:text-[11px] text-center ${colors[state]}`}>
-      {label}
-    </span>
-  )
+function getConnectorColor(
+  stepIndex: number,
+  currentIndex: number,
+  isApproved: boolean,
+  isFailed: boolean
+): string {
+  // La línea entre step_i y step_i+1 está "completada" si currentIndex > i
+  if (stepIndex < currentIndex) {
+    if (isFailed) return "bg-red-300"
+    if (isApproved) return "bg-green-300"
+    return "bg-[#1b38e8]"
+  }
+  return "bg-gray-200"
 }
