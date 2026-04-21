@@ -236,3 +236,90 @@ export const DICTAMEN_DECISION_LABELS: Record<DictamenDecision, string> = {
   rejected: "Rechazado",
   observed: "Observado",
 }
+
+// ============================================================
+// STATUS BUCKETS (UX) - agrupación para presentación visual
+// ============================================================
+//
+// Agrupa los 13 estados internos en 7 buckets de UX. Útil para:
+//  - Renderizar el timeline de pasos (qué "paso" está activo)
+//  - Hero dinámico del dashboard (qué mensaje mostrar)
+//  - Tono del mensaje (info / warning / success / error)
+
+export const STATUS_BUCKETS = [
+  "draft",
+  "pending_review",
+  "in_analysis",
+  "docs_requested",
+  "in_committee",
+  "approved",
+  "rejected",
+  "cancelled",
+] as const
+export type StatusBucket = (typeof STATUS_BUCKETS)[number]
+
+export function getStatusBucket(status: ApplicationStatus): StatusBucket {
+  switch (status) {
+    case "draft":
+      return "draft"
+    case "submitted":
+    case "pending_authorization":
+      return "pending_review"
+    case "authorized":
+    case "docs_in_review":
+      return "in_analysis"
+    case "docs_requested":
+      return "docs_requested"
+    case "in_risk_analysis":
+    case "observed":
+      return "in_committee"
+    case "approved":
+      return "approved"
+    case "rejected_by_officer":
+    case "rejected_by_analyst":
+      return "rejected"
+    case "cancelled_by_client":
+    case "cancelled_by_worcap":
+      return "cancelled"
+  }
+}
+
+/**
+ * Pasos lineales del proceso del legajo (para el timeline).
+ * Los estados terminales (rejected/cancelled) no tienen paso propio -
+ * se muestran como "paso final rojo" en el timeline.
+ */
+export const TIMELINE_STEPS = [
+  { bucket: "draft", label: "Borrador", shortLabel: "Borrador" },
+  { bucket: "pending_review", label: "Pendiente de recepción", shortLabel: "Recepción" },
+  { bucket: "in_analysis", label: "En análisis", shortLabel: "Análisis" },
+  { bucket: "in_committee", label: "En comité", shortLabel: "Comité" },
+  { bucket: "approved", label: "Finalizada", shortLabel: "Resultado" },
+] as const satisfies ReadonlyArray<{
+  bucket: StatusBucket
+  label: string
+  shortLabel: string
+}>
+
+/**
+ * Dado un bucket, devuelve el índice del paso correspondiente en TIMELINE_STEPS.
+ * - docs_requested → el cliente vuelve al paso "Pendiente de recepción" (tiene que re-enviar)
+ * - rejected/cancelled → índice del último paso (Finalizada) pero con flag de "failed"
+ */
+export function getTimelineIndex(bucket: StatusBucket): number {
+  switch (bucket) {
+    case "draft":
+      return 0
+    case "pending_review":
+    case "docs_requested":
+      return 1
+    case "in_analysis":
+      return 2
+    case "in_committee":
+      return 3
+    case "approved":
+    case "rejected":
+    case "cancelled":
+      return 4
+  }
+}

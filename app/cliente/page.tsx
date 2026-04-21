@@ -2,27 +2,30 @@ import Link from "next/link"
 import { createClient } from "@/lib/supabase/server"
 import { requireRole } from "@/lib/auth/session"
 import {
-  APPLICATION_STATUS_LABELS,
   CLIENT_TYPE_LABELS,
   REQUIRED_DOCS_BY_CLIENT_TYPE,
+  APPLICATION_STATUS_LABELS,
   isFinalStatus,
 } from "@/lib/constants/roles"
-import { ArrowRight, FileText, Building2 } from "lucide-react"
+import { CheckCircle2 } from "lucide-react"
 import { ProgressRing } from "@/components/shared/progress-ring"
+import { DashboardHero } from "@/components/cliente/dashboard-hero"
+import { ApplicationTimeline } from "@/components/cliente/application-timeline"
 
 export default async function ClientDashboard() {
   const { user, profile } = await requireRole("client")
   const supabase = await createClient()
 
-  // Traer el cliente (empresa) del usuario si existe. Puede no existir aún
-  // si recién se registró y no arrancó el onboarding.
+  const firstName = profile.full_name.split(" ")[0]
+
+  // Traer el cliente (empresa) del usuario si existe
   const { data: client } = await supabase
     .from("clients")
     .select("*")
     .eq("owner_user_id", user.id)
     .maybeSingle()
 
-  // Si tiene cliente, buscar su legajo activo
+  // Legajo activo (si hay cliente)
   const { data: activeApp } = client
     ? await supabase
         .from("applications")
@@ -34,21 +37,39 @@ export default async function ClientDashboard() {
         .maybeSingle()
     : { data: null }
 
-  // Contar documentos subidos vs requeridos (para el anillo de documentación)
+  // Si no hay activo pero podría haber uno cerrado (aprobado/rechazado) reciente
+  const { data: lastClosedApp } =
+    client && !activeApp
+      ? await supabase
+          .from("applications")
+          .select("*")
+          .eq("client_id", client.id)
+          .in(
+            "status",
+            ["approved", "rejected_by_officer", "rejected_by_analyst", "cancelled_by_client", "cancelled_by_worcap"]
+          )
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle()
+      : { data: null }
+
+  // Usamos el activo si existe, sino el último cerrado (para mostrar resultado)
+  const displayedApp = activeApp ?? lastClosedApp
+
+  // Conteo de documentos
   const requiredDocs = client
     ? REQUIRED_DOCS_BY_CLIENT_TYPE[client.client_type] ?? []
     : []
   const totalDocsRequired = requiredDocs.length
 
   let uploadedDocsCount = 0
-  if (activeApp && requiredDocs.length > 0) {
+  if (displayedApp && requiredDocs.length > 0) {
     const { data: uploadedDocs } = await supabase
       .from("documents")
       .select("document_type")
-      .eq("application_id", activeApp.id)
+      .eq("application_id", displayedApp.id)
 
     if (uploadedDocs) {
-      // Contar únicos por document_type que estén en el listado de requeridos
       const uniqueTypes = new Set(
         uploadedDocs
           .map((d) => d.document_type)
@@ -57,136 +78,119 @@ export default async function ClientDashboard() {
       uploadedDocsCount = uniqueTypes.size
     }
   }
+  const docsPending = totalDocsRequired - uploadedDocsCount
 
-  // Progreso del onboarding: step actual (1..5) ó 5 si está completado
+  // Progreso del onboarding
   const onboardingStep = client?.onboarding_completed
     ? 5
     : client?.onboarding_step ?? 0
   const totalOnboardingSteps = 5
 
-  return (
-    <div className="max-w-5xl mx-auto">
-      <header className="mb-8">
-        <h1 className="text-2xl font-semibold text-gray-900">
-          ¡Hola, {profile.full_name.split(" ")[0]}!
-        </h1>
-        <p className="mt-1 text-sm text-gray-600">
-          Desde acá gestionás tu solicitud de crédito en WORCAP.
-        </p>
-      </header>
+  // ¿Los anillos están los dos al 100%? Si sí los colapsamos en una línea
+  const onboardingDone = onboardingStep >= totalOnboardingSteps
+  const docsDone = totalDocsRequired > 0 && uploadedDocsCount >= totalDocsRequired
+  const bothComplete = onboardingDone && docsDone && client !== null
 
-      {/* CASO 1: Sin perfil de empresa cargado aún */}
-      {!client && (
-        <div className="rounded-lg border border-gray-200 bg-white p-6">
-          <div className="flex items-start gap-4">
-            <div className="h-10 w-10 rounded-md bg-blue-50 text-[#1b38e8] grid place-items-center shrink-0">
-              <Building2 className="h-5 w-5" />
-            </div>
-            <div className="flex-1">
-              <h2 className="text-lg font-semibold text-gray-900">
-                Empezá por tu onboarding
-              </h2>
-              <p className="mt-1 text-sm text-gray-600">
-                Completá los datos de tu empresa para poder iniciar una solicitud de crédito.
-                Es un proceso de 5 pasos y podés guardar y continuar cuando quieras.
+  return (
+    <div className="max-w-5xl mx-auto space-y-6">
+      {/* 1. HERO - mensaje principal que cambia según estado */}
+      <DashboardHero
+        clientName={firstName}
+        hasClient={!!client}
+        onboardingCompleted={client?.onboarding_completed ?? false}
+        onboardingStep={client?.onboarding_step ?? 0}
+        activeApp={
+          displayedApp
+            ? {
+                id: displayedApp.id,
+                application_number: displayedApp.application_number,
+                status: displayedApp.status,
+                submitted_at: displayedApp.submitted_at,
+              }
+            : null
+        }
+        docsPending={docsPending}
+      />
+
+      {/* 2. TIMELINE - solo si hay legajo (activo o cerrado) */}
+      {displayedApp && (
+        <section className="rounded-xl border border-gray-200 bg-white p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <p className="text-xs uppercase tracking-wider text-gray-500">
+                Estado del legajo
               </p>
-              <Link
-                href="/cliente/onboarding"
-                className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-[#1b38e8] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1730c4]"
-              >
-                Iniciar onboarding
-                <ArrowRight className="h-4 w-4" />
-              </Link>
+              <p className="mt-1 text-lg font-semibold text-gray-900">
+                {displayedApp.application_number}
+              </p>
             </div>
+            <span className="inline-block rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
+              {APPLICATION_STATUS_LABELS[displayedApp.status]}
+            </span>
           </div>
-        </div>
+          <ApplicationTimeline status={displayedApp.status} />
+        </section>
       )}
 
-      {/* CASO 2: Con empresa cargada */}
+      {/* 3. DATOS DE LA EMPRESA (solo si hay cliente) */}
       {client && (
-        <div className="grid gap-4 md:grid-cols-2">
-          {/* Card de empresa */}
-          <div className="rounded-lg border border-gray-200 bg-white p-6">
-            <p className="text-xs uppercase tracking-wider text-gray-500 mb-2">Tu empresa</p>
-            <h2 className="text-lg font-semibold text-gray-900">{client.legal_name}</h2>
-            <dl className="mt-4 space-y-2 text-sm">
-              <div className="flex justify-between">
-                <dt className="text-gray-600">CUIT</dt>
-                <dd className="font-mono text-gray-900">{client.cuit}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-gray-600">Tipo</dt>
-                <dd className="text-gray-900">{CLIENT_TYPE_LABELS[client.client_type]}</dd>
-              </div>
-              {!client.onboarding_completed && (
-                <div className="mt-3 rounded-md bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800">
-                  Tu onboarding está en el paso {client.onboarding_step} de 5.{" "}
-                  <Link href="/cliente/onboarding" className="underline font-medium">
-                    Continuar
-                  </Link>
-                </div>
-              )}
-            </dl>
-          </div>
-
-          {/* Card de legajo activo */}
-          <div className="rounded-lg border border-gray-200 bg-white p-6">
-            <p className="text-xs uppercase tracking-wider text-gray-500 mb-2">
-              Solicitud actual
+        <section className="rounded-xl border border-gray-200 bg-white p-6">
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-xs uppercase tracking-wider text-gray-500">
+              Tu empresa
             </p>
-            {activeApp ? (
-              <>
-                <h2 className="text-lg font-semibold text-gray-900">
-                  Legajo {activeApp.application_number}
-                </h2>
-                <div className="mt-3 inline-block rounded-full bg-blue-50 text-[#1b38e8] px-2.5 py-1 text-xs font-medium">
-                  {APPLICATION_STATUS_LABELS[activeApp.status]}
-                </div>
-                <dl className="mt-4 space-y-2 text-sm">
-                  {activeApp.requested_amount && (
-                    <div className="flex justify-between">
-                      <dt className="text-gray-600">Monto solicitado</dt>
-                      <dd className="text-gray-900">
-                        {new Intl.NumberFormat("es-AR", {
-                          style: "currency",
-                          currency: "ARS",
-                          maximumFractionDigits: 0,
-                        }).format(Number(activeApp.requested_amount))}
-                      </dd>
-                    </div>
-                  )}
-                </dl>
-                <Link
-                  href="/cliente/solicitud"
-                  className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-[#1b38e8] hover:underline"
-                >
-                  Ver detalle
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
-              </>
-            ) : (
-              <>
-                <p className="text-sm text-gray-600">
-                  {client.onboarding_completed
-                    ? "Todavía no iniciaste una solicitud."
-                    : "Completá tu onboarding para iniciar una solicitud."}
-                </p>
-                {client.onboarding_completed && (
-                  <Link
-                    href="/cliente/solicitud/nueva"
-                    className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-[#1b38e8] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#1730c4]"
-                  >
-                    <FileText className="h-4 w-4" />
-                    Nueva solicitud
-                  </Link>
-                )}
-              </>
+            {!client.onboarding_completed && (
+              <Link
+                href="/cliente/onboarding"
+                className="text-xs font-medium text-[#1b38e8] hover:underline"
+              >
+                Continuar onboarding →
+              </Link>
             )}
           </div>
+          <h3 className="text-lg font-semibold text-gray-900">
+            {client.legal_name}
+          </h3>
+          <dl className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+            <div>
+              <dt className="text-gray-500 text-xs">CUIT</dt>
+              <dd className="mt-0.5 font-mono text-gray-900">{client.cuit}</dd>
+            </div>
+            <div>
+              <dt className="text-gray-500 text-xs">Tipo</dt>
+              <dd className="mt-0.5 text-gray-900">
+                {CLIENT_TYPE_LABELS[client.client_type]}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-gray-500 text-xs">Estado del perfil</dt>
+              <dd className="mt-0.5 text-gray-900">
+                {client.onboarding_completed ? "Completo" : `En paso ${client.onboarding_step} de 5`}
+              </dd>
+            </div>
+          </dl>
+        </section>
+      )}
 
-          {/* Card de progreso (anillos) - solo si hay legajo activo */}
-          {activeApp && !isFinalStatus(activeApp.status) && (
-            <div className="rounded-lg border border-gray-200 bg-white p-6 md:col-span-2">
+      {/* 4. PROGRESO - dos modos: completo (linea chica) o en curso (anillos) */}
+      {client && displayedApp && !isFinalStatus(displayedApp.status) && (
+        <>
+          {bothComplete ? (
+            /* Colapsado: línea chica de confirmación */
+            <section className="rounded-xl border border-green-200 bg-green-50 p-4">
+              <div className="flex items-center gap-3">
+                <CheckCircle2 className="h-5 w-5 text-green-700 shrink-0" />
+                <p className="text-sm text-green-900">
+                  <span className="font-semibold">
+                    Onboarding y documentación completos.
+                  </span>{" "}
+                  Ya enviaste todo lo necesario.
+                </p>
+              </div>
+            </section>
+          ) : (
+            /* Expandido: anillos */
+            <section className="rounded-xl border border-gray-200 bg-white p-6">
               <p className="text-xs uppercase tracking-wider text-gray-500 mb-4">
                 Tu progreso
               </p>
@@ -212,9 +216,9 @@ export default async function ClientDashboard() {
                   />
                 </div>
               </div>
-            </div>
+            </section>
           )}
-        </div>
+        </>
       )}
     </div>
   )
