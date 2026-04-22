@@ -1,4 +1,5 @@
 import Link from "next/link"
+import type { ComponentType } from "react"
 import { requireAnyRole } from "@/lib/auth/session"
 import { createClient } from "@/lib/supabase/server"
 import {
@@ -22,6 +23,34 @@ import { DictamenesTabs } from "@/components/staff/dictamenes-tabs"
 
 type SearchParams = {
   tab?: string
+}
+
+type DecisionMeta = {
+  Icon: ComponentType<{ className?: string }>
+  bg: string
+  text: string
+  border: string
+}
+
+const DECISION_META: Record<DictamenDecision, DecisionMeta> = {
+  approved: {
+    Icon: CheckCircle2,
+    bg: "bg-emerald-50",
+    text: "text-emerald-700",
+    border: "border-emerald-200",
+  },
+  rejected: {
+    Icon: XCircle,
+    bg: "bg-red-50",
+    text: "text-red-700",
+    border: "border-red-200",
+  },
+  observed: {
+    Icon: MinusCircle,
+    bg: "bg-amber-50",
+    text: "text-amber-700",
+    border: "border-amber-200",
+  },
 }
 
 export default async function DictamenesPage({
@@ -72,8 +101,7 @@ export default async function DictamenesPage({
     }
   })
 
-  // ===== Emitidos: dictámenes firmados por Laura (analyst_id = user.id) =====
-  // Si el usuario es admin, mostramos todos (no tienen "suyos").
+  // ===== Emitidos: dictámenes firmados (filtra por analista si aplica) =====
   let emitidosQuery = supabase
     .from("dictamenes")
     .select(
@@ -293,6 +321,7 @@ function EmitidosSection({
     <div className="rounded-xl border border-gray-200 bg-white divide-y divide-gray-100 overflow-hidden">
       {items.map((d) => {
         const decisionMeta = DECISION_META[d.decision]
+        const DecisionIcon = decisionMeta.Icon
         return (
           <Link
             key={d.id}
@@ -303,11 +332,10 @@ function EmitidosSection({
             }
             className="flex items-start gap-4 p-4 hover:bg-gray-50 transition-colors"
           >
-            {/* Icono de decisión */}
             <div
               className={`h-10 w-10 rounded-lg flex items-center justify-center shrink-0 ${decisionMeta.bg}`}
             >
-              <decisionMeta.Icon className={`h-5 w-5 ${decisionMeta.text}`} />
+              <DecisionIcon className={`h-5 w-5 ${decisionMeta.text}`} />
             </div>
 
             <div className="flex-1 min-w-0">
@@ -366,35 +394,6 @@ function EmitidosSection({
 // ============================================================
 // HELPERS
 // ============================================================
-
-const DECISION_META: Record
-  DictamenDecision,
-  {
-    Icon: typeof CheckCircle2
-    bg: string
-    text: string
-    border: string
-  }
-> = {
-  approved: {
-    Icon: CheckCircle2,
-    bg: "bg-emerald-50",
-    text: "text-emerald-700",
-    border: "border-emerald-200",
-  },
-  rejected: {
-    Icon: XCircle,
-    bg: "bg-red-50",
-    text: "text-red-700",
-    border: "border-red-200",
-  },
-  observed: {
-    Icon: MinusCircle,
-    bg: "bg-amber-50",
-    text: "text-amber-700",
-    border: "border-amber-200",
-  },
-}
 
 function daysSince(dateStr: string): number {
   const diffMs = Date.now() - new Date(dateStr).getTime()
