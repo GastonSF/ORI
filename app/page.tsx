@@ -65,11 +65,13 @@ export default async function LandingPage() {
             </p>
             <div className="grid sm:grid-cols-2 gap-3">
               <TeamCard
+                href="/login?role=officer"
                 icon={<Briefcase className="h-5 w-5" />}
                 title="Oficial"
                 subtitle="Gestionar clientes y legajos"
               />
               <TeamCard
+                href="/login?role=analyst"
                 icon={<BarChart3 className="h-5 w-5" />}
                 title="Analista"
                 subtitle="Revisar y dictaminar"
@@ -117,16 +119,21 @@ function ProfileCard({
 }
 
 function TeamCard({
+  href,
   icon,
   title,
   subtitle,
 }: {
+  href: string
   icon: React.ReactNode
   title: string
   subtitle: string
 }) {
   return (
-    <div className="rounded-lg border border-gray-200 p-3">
+    <Link
+      href={href}
+      className="block rounded-lg border border-gray-200 p-3 transition hover:border-[#1b38e8] hover:shadow-sm"
+    >
       <div className="flex items-start gap-2 text-gray-700">
         <div className="text-[#1b38e8] shrink-0 mt-0.5">{icon}</div>
         <div>
@@ -134,6 +141,6 @@ function TeamCard({
           <p className="text-xs text-gray-600">{subtitle}</p>
         </div>
       </div>
-    </div>
+    </Link>
   )
 }
