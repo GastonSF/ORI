@@ -48,7 +48,6 @@ export function LegajoDocumentosPanel({ documents, additionalRequests }: Props) 
   const initialDocs = documents.filter((d) => d.doc_phase === "initial")
   const additionalDocs = documents.filter((d) => d.doc_phase === "additional")
 
-  // Para los adicionales cruzamos con el pedido para saber nombre e is_required
   const additionalWithMeta = additionalRequests.map((req) => {
     const doc = additionalDocs.find((d) => d.id === req.fulfilled_by_document_id)
     return { req, doc }
@@ -85,7 +84,6 @@ export function LegajoDocumentosPanel({ documents, additionalRequests }: Props) 
           </h2>
         </div>
 
-        {/* Iniciales */}
         {initialDocs.length > 0 && (
           <div>
             <div className="px-4 py-2 bg-gray-50 border-b border-gray-100">
@@ -112,7 +110,6 @@ export function LegajoDocumentosPanel({ documents, additionalRequests }: Props) 
           </div>
         )}
 
-        {/* Adicionales */}
         {additionalRequests.length > 0 && (
           <div>
             <div className="px-4 py-2 bg-gray-50 border-b border-t border-gray-100">
@@ -148,8 +145,7 @@ export function LegajoDocumentosPanel({ documents, additionalRequests }: Props) 
         )}
       </aside>
 
-      {/* Modal de preview */}
-      {previewUrl && (
+      {previewUrl ? (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60"
           onClick={closePreview}
@@ -167,16 +163,16 @@ export function LegajoDocumentosPanel({ documents, additionalRequests }: Props) 
                   href={previewUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="p-2 rounded-md hover:bg-gray-100 text-gray-600 transition-colors"
                   title="Abrir en nueva pestaña"
+                  className="p-2 rounded-md hover:bg-gray-100 text-gray-600 transition-colors"
                 >
                   <Download className="h-4 w-4" />
                 </a>
                 <button
                   type="button"
                   onClick={closePreview}
-                  className="p-2 rounded-md hover:bg-gray-100 text-gray-600 transition-colors"
                   title="Cerrar"
+                  className="p-2 rounded-md hover:bg-gray-100 text-gray-600 transition-colors"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -191,14 +187,10 @@ export function LegajoDocumentosPanel({ documents, additionalRequests }: Props) 
             </div>
           </div>
         </div>
-      )}
+      ) : null}
     </>
   )
 }
-
-// ============================================================
-// DocRow — fila para docs iniciales
-// ============================================================
 
 function DocRow({
   label,
@@ -243,10 +235,6 @@ function DocRow({
   )
 }
 
-// ============================================================
-// AddlDocRow — fila para docs adicionales (puede no tener doc subido)
-// ============================================================
-
 function AddlDocRow({
   name,
   isRequired,
@@ -262,7 +250,6 @@ function AddlDocRow({
   onView?: () => void
   loading: boolean
 }) {
-  // Estado combinado: del pedido o del doc
   const effectiveStatus: "pending" | "uploaded" | "approved" | "rejected" =
     reqStatus === "approved"
       ? "approved"
@@ -312,10 +299,6 @@ function AddlDocRow({
     </li>
   )
 }
-
-// ============================================================
-// HELPERS
-// ============================================================
 
 function getStatusIcon(
   status: "pending" | "uploaded" | "approved" | "rejected"
