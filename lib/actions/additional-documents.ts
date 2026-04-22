@@ -90,7 +90,7 @@ export async function prepareAdditionalDocumentUploadAction(
     .insert({
       application_id: parsed.data.application_id,
       client_id: clients.id,
-      document_type: "otro_adicional", // se sobreescribe en confirmación si hace falta
+      document_type: "otro_adicional",
       doc_phase: "additional",
       file_path: filePath,
       file_name: parsed.data.file_name,
@@ -121,7 +121,10 @@ export async function prepareAdditionalDocumentUploadAction(
 // CONFIRMAR UPLOAD DE UN DOCUMENTO ADICIONAL
 // ============================================================
 // Se llama después de que el cliente subió el archivo al Storage:
-// marca el documento como uploaded y vincula con el request
+// - Marca el documento como uploaded
+// - Vincula con el request (status=fulfilled, fulfilled_by_document_id)
+// - Si había un documento anterior cumpliendo este request, lo borra
+//   (del storage y de la tabla) para evitar huérfanos al reemplazar
 
 const confirmSchema = z.object({
   document_id: z.string().uuid(),
@@ -142,24 +145,59 @@ export async function confirmAdditionalDocumentUploadAction(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { ok: false, error: "No autenticado" }
 
-  // Validar ownership del documento
-  const { data: doc } = await supabase
+  // Validar ownership del documento nuevo
+  const { data: newDoc, error: newDocErr } = await supabase
     .from("documents")
-    .select("id, uploaded_by, application_id")
+    .select("id, uploaded_by, application_id, file_path")
     .eq("id", parsed.data.document_id)
     .single()
-  if (!doc) return { ok: false, error: "Documento no encontrado" }
-  if (doc.uploaded_by !== user.id) return { ok: false, error: "No autorizado" }
+  if (newDocErr || !newDoc) return { ok: false, error: "Documento no encontrado" }
+  if (newDoc.uploaded_by !== user.id) return { ok: false, error: "No autorizado" }
 
-  // Marcar el doc como uploaded
-  const { error: docErr } = await supabase
+  // Verificar que el archivo realmente fue subido al storage
+  // (evita que confirmemos algo que nunca llegó)
+  const fileDir = newDoc.file_path.substring(0, newDoc.file_path.lastIndexOf("/"))
+  const fileName = newDoc.file_path.substring(newDoc.file_path.lastIndexOf("/") + 1)
+  const { data: filesInDir } = await supabase.storage
+    .from("documents")
+    .list(fileDir, { search: fileName })
+
+  const fileExists = filesInDir?.some((f) => f.name === fileName) ?? false
+  if (!fileExists) {
+    // El frontend nos dijo que subió, pero el archivo no está. Limpieza:
+    await supabase.from("documents").delete().eq("id", parsed.data.document_id)
+    return {
+      ok: false,
+      error: "El archivo no se subió correctamente al almacenamiento. Intentá de nuevo.",
+    }
+  }
+
+  // Obtener el request y, si ya tenía un doc anterior, prepararnos para borrarlo
+  const { data: request, error: reqGetErr } = await supabase
+    .from("additional_document_requests")
+    .select("id, application_id, fulfilled_by_document_id")
+    .eq("id", parsed.data.request_id)
+    .single()
+  if (reqGetErr || !request) return { ok: false, error: "Pedido no encontrado" }
+
+  // Consistencia: el nuevo doc tiene que ser de la misma application que el request
+  if (request.application_id !== newDoc.application_id) {
+    // Rollback: el doc está mal asociado. Borrarlo.
+    await supabase.storage.from("documents").remove([newDoc.file_path])
+    await supabase.from("documents").delete().eq("id", parsed.data.document_id)
+    return { ok: false, error: "Inconsistencia: el documento no pertenece al legajo del pedido" }
+  }
+
+  const oldDocId = request.fulfilled_by_document_id
+
+  // Paso 1: marcar el doc nuevo como uploaded
+  const { error: docUpErr } = await supabase
     .from("documents")
     .update({ status: "uploaded", uploaded_at: new Date().toISOString() })
     .eq("id", parsed.data.document_id)
+  if (docUpErr) return { ok: false, error: docUpErr.message }
 
-  if (docErr) return { ok: false, error: docErr.message }
-
-  // Linkear el request: status=fulfilled + fulfilled_by_document_id
+  // Paso 2: linkear el request al nuevo doc (esto sobrescribe el fulfilled_by_document_id)
   const { error: reqErr } = await supabase
     .from("additional_document_requests")
     .update({
@@ -168,8 +206,21 @@ export async function confirmAdditionalDocumentUploadAction(
       fulfilled_at: new Date().toISOString(),
     })
     .eq("id", parsed.data.request_id)
-
   if (reqErr) return { ok: false, error: reqErr.message }
+
+  // Paso 3: si había un doc anterior, borrarlo (evita huérfanos al reemplazar)
+  if (oldDocId && oldDocId !== parsed.data.document_id) {
+    const { data: oldDoc } = await supabase
+      .from("documents")
+      .select("id, file_path")
+      .eq("id", oldDocId)
+      .single()
+    if (oldDoc) {
+      // Best-effort: si falla el storage, igual borramos el row
+      await supabase.storage.from("documents").remove([oldDoc.file_path])
+      await supabase.from("documents").delete().eq("id", oldDoc.id)
+    }
+  }
 
   revalidatePath("/cliente")
   revalidatePath("/cliente/documentos")
@@ -179,9 +230,9 @@ export async function confirmAdditionalDocumentUploadAction(
 }
 
 // ============================================================
-// ELIMINAR / REEMPLAZAR DOCUMENTO ADICIONAL
+// ELIMINAR DOCUMENTO ADICIONAL
 // ============================================================
-// Borra el doc del storage + marca el request como pending de nuevo
+// Borra el doc del storage + del table + marca el request como pending
 
 const deleteSchema = z.object({
   document_id: z.string().uuid(),
@@ -200,22 +251,55 @@ export async function deleteAdditionalDocumentAction(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { ok: false, error: "No autenticado" }
 
-  const { data: doc } = await supabase
+  const { data: doc, error: docGetErr } = await supabase
     .from("documents")
-    .select("id, uploaded_by, file_path")
+    .select("id, uploaded_by, file_path, application_id")
     .eq("id", parsed.data.document_id)
     .single()
-  if (!doc) return { ok: false, error: "Documento no encontrado" }
+  if (docGetErr || !doc) return { ok: false, error: "Documento no encontrado" }
   if (doc.uploaded_by !== user.id) return { ok: false, error: "No autorizado" }
 
-  // Borrar archivo del storage
-  await supabase.storage.from("documents").remove([doc.file_path])
+  // Validar consistencia: el request tiene que pertenecer a la misma application
+  // y el request tiene que estar efectivamente vinculado a este documento.
+  // Esto bloquea el caso donde por UI desfasada se intenta borrar un doc que
+  // ya no es el que cumple el request (ej: hubo un replace intermedio).
+  const { data: request, error: reqGetErr } = await supabase
+    .from("additional_document_requests")
+    .select("id, application_id, fulfilled_by_document_id")
+    .eq("id", parsed.data.request_id)
+    .single()
+  if (reqGetErr || !request) return { ok: false, error: "Pedido no encontrado" }
+
+  if (request.application_id !== doc.application_id) {
+    return { ok: false, error: "Inconsistencia: el documento no pertenece al legajo del pedido" }
+  }
+  if (request.fulfilled_by_document_id !== doc.id) {
+    return {
+      ok: false,
+      error: "Este archivo ya no está vinculado al pedido. Recargá la página e intentá de nuevo.",
+    }
+  }
+
+  // Borrar archivo del storage (best-effort: si falla, lo logueamos pero seguimos)
+  const { error: storageErr } = await supabase.storage
+    .from("documents")
+    .remove([doc.file_path])
+  if (storageErr) {
+    console.error("[deleteAdditionalDocument] Storage remove failed:", storageErr.message)
+    // No abortamos: preferimos limpiar la DB aunque el archivo haya quedado en storage.
+  }
 
   // Borrar registro del documento
-  await supabase.from("documents").delete().eq("id", parsed.data.document_id)
+  const { error: delErr } = await supabase
+    .from("documents")
+    .delete()
+    .eq("id", parsed.data.document_id)
+  if (delErr) return { ok: false, error: delErr.message }
 
-  // Reabrir el request
-  await supabase
+  // Reabrir el request (último paso: si algo falla antes, el request queda
+  // apuntando a un doc inexistente, pero es un estado detectable y corregible.
+  // Si lo hiciéramos al revés, el doc quedaría huérfano sin forma de ubicarlo.)
+  const { error: reqErr } = await supabase
     .from("additional_document_requests")
     .update({
       status: "pending",
@@ -223,6 +307,7 @@ export async function deleteAdditionalDocumentAction(
       fulfilled_at: null,
     })
     .eq("id", parsed.data.request_id)
+  if (reqErr) return { ok: false, error: reqErr.message }
 
   revalidatePath("/cliente")
   revalidatePath("/cliente/documentos")
