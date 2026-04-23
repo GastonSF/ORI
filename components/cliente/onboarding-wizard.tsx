@@ -40,7 +40,7 @@ const SECTIONS = [
 
 const JOURNEY_STEPS = [
   "Contanos sobre vos",
-  "Subí tu documentación",
+  "Recibimos tu solicitud",
   "Revisamos tus documentos",
   "Elegí tu línea de crédito",
   "Sumá la documentación de tu línea",
@@ -59,12 +59,10 @@ export function OnboardingWizard({
 }: Props) {
   const router = useRouter()
   const [currentSection, setCurrentSection] = useState(initialStep)
-  // Guardamos localmente el máximo alcanzado, se incrementa apenas onDone se dispara
   const [localMaxReached, setLocalMaxReached] = useState(client?.onboarding_step ?? 1)
   const serverMaxReached = client?.onboarding_step ?? 1
   const maxReached = Math.max(localMaxReached, serverMaxReached)
 
-  // Salto manual (click en el checklist lateral): valida que sea alcanzable
   const jumpTo = (section: number) => {
     if (section <= maxReached || section <= currentSection) {
       setCurrentSection(section)
@@ -73,12 +71,8 @@ export function OnboardingWizard({
     }
   }
 
-  // Avance automático (sub-step completado): NO valida maxReached,
-  // el server ya confirmó el save al llamar onDone
   const advanceToNext = () => {
     const nextSection = Math.min(currentSection + 1, 5)
-    // Actualizar el máximo alcanzado localmente para que el checklist marque
-    // la sección recién completada con tilde
     setLocalMaxReached((prev) => Math.max(prev, nextSection))
     setCurrentSection(nextSection)
     router.replace(`/cliente/onboarding?paso=${nextSection}`, { scroll: false })
