@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { Check, ChevronLeft, LogOut } from "lucide-react"
+import { ChevronLeft, LogOut } from "lucide-react"
 import type { Client, CompanyMember } from "@/types/database.types"
 import type { DocumentType } from "@/lib/constants/roles"
 import { StepClientType } from "./steps/step-client-type"
@@ -30,12 +30,25 @@ type Props = {
   existingDocs: Record<string, ExistingDoc>
 }
 
-const STEP_LABELS = [
+// Los 5 sub-pasos internos del onboarding (completando el paso 1 del flujo de 8)
+const SUB_STEPS = [
   { n: 1, label: "Tipo de cliente" },
   { n: 2, label: "Datos generales" },
   { n: 3, label: "Estructura societaria" },
   { n: 4, label: "Documentación" },
   { n: 5, label: "Revisión y envío" },
+]
+
+// Los 8 pasos del viaje completo del cliente
+const GLOBAL_STEPS = [
+  "Datos iniciales",
+  "Pendiente de recepción",
+  "Revisión económico-financiera",
+  "Elección de línea",
+  "Documentación adicional",
+  "Revisión econ-fin",
+  "Análisis crediticio",
+  "Resultado",
 ]
 
 export function OnboardingWizard({
@@ -61,15 +74,19 @@ export function OnboardingWizard({
   const next = () => goTo(Math.min(currentStep + 1, 5))
   const back = () => goTo(Math.max(currentStep - 1, 1))
 
-  const progress = Math.min((maxReachedStep / 5) * 100, 100)
+  // Progreso del sub-paso actual dentro del paso 1 global
+  const subProgress = Math.min((maxReachedStep / 5) * 100, 100)
 
   const uploadedDocTypes = Object.keys(existingDocs).filter(
     (k) => existingDocs[k] !== null && existingDocs[k] !== undefined
   ) as DocumentType[]
 
+  const currentSubStepLabel = SUB_STEPS.find((s) => s.n === currentStep)?.label ?? ""
+
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-200">
+        {/* Top bar: brand + acciones */}
         <div className="max-w-5xl mx-auto px-6 h-14 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
             <Link href="/cliente" className="text-[#1b38e8] font-bold tracking-tight">
@@ -79,59 +96,69 @@ export function OnboardingWizard({
             <span className="text-sm text-gray-700 truncate">
               {client?.legal_name && client.legal_name !== "__pendiente__"
                 ? client.legal_name
-                : "Onboarding"}
+                : "Tu solicitud"}
             </span>
           </div>
 
-          <div className="flex items-center gap-4">
-            <span className="hidden sm:block text-sm text-[#1b38e8] font-medium">
-              {Math.round(progress)}% completado
+          <Link
+            href="/cliente"
+            className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+          >
+            <LogOut className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Guardar y salir</span>
+          </Link>
+        </div>
+
+        {/* Timeline global de 8 pasos */}
+        <div className="max-w-5xl mx-auto px-6 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5">
+              {GLOBAL_STEPS.map((_, idx) => (
+                <GlobalDot key={idx} idx={idx} currentGlobalIdx={0} />
+              ))}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium text-gray-900">
+                Paso 1 de 8 · {GLOBAL_STEPS[0]}
+              </p>
+              <p className="text-[11px] text-gray-500">
+                Estás completando los datos iniciales de tu solicitud
+              </p>
+            </div>
+            <span className="hidden sm:block text-xs text-gray-500 shrink-0">
+              {Math.round(subProgress)}% del paso 1
             </span>
-            <Link
-              href="/cliente"
-              className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
-            >
-              <LogOut className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Guardar y salir</span>
-            </Link>
           </div>
         </div>
 
-        <nav aria-label="Pasos del onboarding" className="max-w-5xl mx-auto px-6 pb-4">
-          <ol className="flex items-center gap-1 sm:gap-2 overflow-x-auto">
-            {STEP_LABELS.map((s, idx) => {
+        {/* Breadcrumb discreto: sub-pasos del paso 1 */}
+        <nav
+          aria-label="Secciones del paso 1"
+          className="max-w-5xl mx-auto px-6 pb-3 border-t border-gray-100 pt-3"
+        >
+          <ol className="flex items-center gap-1 overflow-x-auto text-[11px]">
+            {SUB_STEPS.map((s, idx) => {
               const isCurrent = currentStep === s.n
-              const isDone = maxReachedStep > s.n || (s.n < currentStep && maxReachedStep >= s.n)
+              const isDone = maxReachedStep > s.n
               const isReachable = s.n <= maxReachedStep
               return (
-                <li key={s.n} className="flex items-center gap-1 sm:gap-2 min-w-0">
+                <li key={s.n} className="flex items-center gap-1 shrink-0">
                   <button
                     type="button"
                     onClick={() => isReachable && goTo(s.n)}
                     disabled={!isReachable}
-                    className={`flex items-center gap-2 px-2 py-1 rounded-md text-xs sm:text-sm transition ${
+                    className={`px-2 py-0.5 rounded transition ${
                       isCurrent
                         ? "text-[#1b38e8] font-semibold"
                         : isDone
-                          ? "text-gray-700 hover:bg-gray-100"
-                          : "text-gray-400 cursor-not-allowed"
+                        ? "text-gray-700 hover:bg-gray-100"
+                        : "text-gray-400 cursor-not-allowed"
                     }`}
                   >
-                    <span
-                      className={`h-6 w-6 rounded-full grid place-items-center text-xs shrink-0 ${
-                        isCurrent
-                          ? "border-2 border-[#1b38e8] text-[#1b38e8]"
-                          : isDone
-                            ? "bg-[#1b38e8] text-white"
-                            : "border-2 border-gray-300 text-gray-400"
-                      }`}
-                    >
-                      {isDone ? <Check className="h-3.5 w-3.5" /> : s.n}
-                    </span>
-                    <span className="hidden sm:inline whitespace-nowrap">{s.label}</span>
+                    {s.n}. {s.label}
                   </button>
-                  {idx < STEP_LABELS.length - 1 && (
-                    <span className="hidden sm:block h-px w-6 bg-gray-300 shrink-0" />
+                  {idx < SUB_STEPS.length - 1 && (
+                    <span className="text-gray-300 select-none">›</span>
                   )}
                 </li>
               )
@@ -141,6 +168,14 @@ export function OnboardingWizard({
       </header>
 
       <main className="max-w-3xl mx-auto px-6 py-8">
+        {/* Contextualizar dentro del paso 1 */}
+        <div className="mb-4 flex items-center justify-between">
+          <h1 className="text-xl font-semibold text-gray-900">{currentSubStepLabel}</h1>
+          <span className="text-xs text-gray-500">
+            {currentStep} de 5
+          </span>
+        </div>
+
         <div className="bg-white border border-gray-200 rounded-lg p-6 md:p-8">
           {currentStep === 1 && <StepClientType client={client} onDone={() => next()} />}
           {currentStep === 2 && <StepGeneralData client={client} onDone={() => next()} />}
@@ -176,4 +211,18 @@ export function OnboardingWizard({
       </main>
     </div>
   )
+}
+
+// ============================================================
+// Dot para el timeline global de 8 pasos
+// ============================================================
+
+function GlobalDot({ idx, currentGlobalIdx }: { idx: number; currentGlobalIdx: number }) {
+  if (idx < currentGlobalIdx) {
+    return <span className="h-1.5 w-1.5 rounded-full bg-[#1b38e8]" />
+  }
+  if (idx === currentGlobalIdx) {
+    return <span className="h-1.5 w-1.5 rounded-full bg-[#1b38e8] ring-2 ring-[#c7d0fb]" />
+  }
+  return <span className="h-1.5 w-1.5 rounded-full bg-gray-200" />
 }
