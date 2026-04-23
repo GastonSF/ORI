@@ -22,6 +22,7 @@ import {
   type ApplicationStatus,
   type FundingLine,
 } from "@/lib/constants/roles"
+import { LegajoMiniTimeline } from "@/components/staff/legajo-mini-timeline"
 
 type Params = { id: string }
 
@@ -196,7 +197,7 @@ export default async function ClienteDetallePage({
                 href={`/staff/legajo/${app.id}`}
                 className="flex items-center gap-4 p-4 hover:bg-gray-50 transition-colors"
               >
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0 space-y-1.5">
                   <div className="flex items-center gap-2.5 flex-wrap">
                     <p className="font-mono font-semibold text-sm text-gray-900">
                       {app.application_number}
@@ -210,7 +211,8 @@ export default async function ClienteDetallePage({
                       </span>
                     )}
                   </div>
-                  <div className="mt-1 flex items-center gap-3 text-xs text-gray-500 flex-wrap">
+                  <LegajoMiniTimeline status={app.status as ApplicationStatus} />
+                  <div className="flex items-center gap-3 text-xs text-gray-500 flex-wrap">
                     <span>
                       Creado el{" "}
                       {new Date(app.created_at).toLocaleDateString("es-AR", {
