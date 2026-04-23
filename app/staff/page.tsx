@@ -25,6 +25,7 @@ import {
   CircleDot,
   Filter,
 } from "lucide-react"
+import { LegajoMiniTimeline } from "@/components/staff/legajo-mini-timeline"
 
 type SearchParams = {
   bucket?: string
@@ -373,6 +374,9 @@ function ApplicationCard({
           <h3 className="font-semibold text-gray-900 text-base truncate">
             {app.client?.legal_name ?? "(Sin empresa)"}
           </h3>
+
+          {/* Mini-timeline del legajo */}
+          <LegajoMiniTimeline status={app.status} />
 
           {/* Línea 3: meta data */}
           <div className="flex items-center gap-3 text-xs text-gray-500 flex-wrap">
