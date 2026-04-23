@@ -15,28 +15,20 @@ type Props = {
 /**
  * Mini-timeline visual del legajo en idioma del cliente.
  *
- * Los 8 pasos alternan entre acciones del cliente y acciones de WORCAP:
- *  1. Contanos sobre vos          (cliente)
- *  2. Subí tu documentación       (cliente)
- *  3. Revisamos tus documentos    (worcap)
- *  4. Elegí tu línea de crédito   (cliente)
- *  5. Sumá la documentación...    (cliente)
- *  6. Revisamos lo que sumaste    (worcap)
- *  7. Analizamos tu solicitud     (worcap)
- *  8. Tenés una respuesta         (worcap)
- *
- * Estados visuales:
- *  - Completados: dot azul sólido
- *  - Actual: dot azul con ring
- *  - Futuros: dot gris
- *  - Aprobado: todos los dots verdes, último con ring verde
- *  - Rechazado/cancelado: último dot rojo con ring rojo
+ * Los 8 pasos del viaje:
+ *  1. Contanos sobre vos           (cliente: onboarding completo)
+ *  2. Recibimos tu solicitud       (worcap: acuse de recibo)
+ *  3. Revisamos tus documentos     (worcap: oficial revisa iniciales)
+ *  4. Elegí tu línea de crédito    (cliente)
+ *  5. Sumá la documentación...     (cliente)
+ *  6. Revisamos lo que sumaste     (worcap)
+ *  7. Analizamos tu solicitud      (worcap: analista)
+ *  8. Tenés una respuesta          (resultado)
  */
 
-// Labels en idioma del cliente alineados al índice de TIMELINE_STEPS
 const CLIENT_LABELS: string[] = [
   "Contanos sobre vos",
-  "Subí tu documentación",
+  "Recibimos tu solicitud",
   "Revisamos tus documentos",
   "Elegí tu línea de crédito",
   "Sumá la documentación de tu línea",
@@ -45,10 +37,9 @@ const CLIENT_LABELS: string[] = [
   "Tenés una respuesta",
 ]
 
-// Versión corta para la variante full (labels debajo de cada dot)
 const CLIENT_LABELS_SHORT: string[] = [
   "Tus datos",
-  "Documentación",
+  "Recibimos",
   "Revisión",
   "Línea",
   "Completar",
@@ -102,10 +93,6 @@ export function LegajoMiniTimeline({ status, variant = "compact" }: Props) {
     </div>
   )
 }
-
-// ============================================================
-// SUB-COMPONENTES
-// ============================================================
 
 function Dot({
   idx,
