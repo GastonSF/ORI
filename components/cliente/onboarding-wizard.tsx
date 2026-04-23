@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { ChevronLeft, LogOut } from "lucide-react"
+import { ChevronLeft, LogOut, Check, Circle } from "lucide-react"
 import type { Client, CompanyMember } from "@/types/database.types"
 import type { DocumentType } from "@/lib/constants/roles"
 import { StepClientType } from "./steps/step-client-type"
@@ -30,25 +30,25 @@ type Props = {
   existingDocs: Record<string, ExistingDoc>
 }
 
-// Los 5 sub-pasos internos del onboarding (completando el paso 1 del flujo de 8)
-const SUB_STEPS = [
-  { n: 1, label: "Tipo de cliente" },
-  { n: 2, label: "Datos generales" },
-  { n: 3, label: "Estructura societaria" },
-  { n: 4, label: "Documentación" },
-  { n: 5, label: "Revisión y envío" },
+// Secciones internas del paso 1 del viaje completo
+const SECTIONS = [
+  { n: 1, title: "Tu empresa", hint: "Qué tipo de organización sos" },
+  { n: 2, title: "Datos generales", hint: "Información de contacto y fiscal" },
+  { n: 3, title: "Quiénes la integran", hint: "Titulares y socios" },
+  { n: 4, title: "Documentación", hint: "Papeles de respaldo" },
+  { n: 5, title: "Revisión y envío", hint: "Todo en orden, lo enviás" },
 ]
 
-// Los 8 pasos del viaje completo del cliente
-const GLOBAL_STEPS = [
-  "Datos iniciales",
-  "Pendiente de recepción",
-  "Revisión económico-financiera",
-  "Elección de línea",
-  "Documentación adicional",
-  "Revisión econ-fin",
-  "Análisis crediticio",
-  "Resultado",
+// Los 8 pasos del viaje completo en voz del cliente
+const JOURNEY_STEPS = [
+  "Contanos sobre vos",
+  "Subí tu documentación",
+  "Revisamos tus documentos",
+  "Elegí tu línea de crédito",
+  "Sumá la documentación de tu línea",
+  "Revisamos lo que sumaste",
+  "Analizamos tu solicitud",
+  "Tenés una respuesta",
 ]
 
 export function OnboardingWizard({
@@ -60,40 +60,40 @@ export function OnboardingWizard({
   existingDocs,
 }: Props) {
   const router = useRouter()
-  const [currentStep, setCurrentStep] = useState(initialStep)
-  const maxReachedStep = client?.onboarding_step ?? 1
+  const [currentSection, setCurrentSection] = useState(initialStep)
+  const maxReachedSection = client?.onboarding_step ?? 1
 
-  const goTo = (step: number) => {
-    if (step <= maxReachedStep || step <= currentStep) {
-      setCurrentStep(step)
-      router.replace(`/cliente/onboarding?paso=${step}`, { scroll: false })
+  const goTo = (section: number) => {
+    if (section <= maxReachedSection || section <= currentSection) {
+      setCurrentSection(section)
+      router.replace(`/cliente/onboarding?paso=${section}`, { scroll: false })
       router.refresh()
     }
   }
 
-  const next = () => goTo(Math.min(currentStep + 1, 5))
-  const back = () => goTo(Math.max(currentStep - 1, 1))
-
-  // Progreso del sub-paso actual dentro del paso 1 global
-  const subProgress = Math.min((maxReachedStep / 5) * 100, 100)
+  const next = () => goTo(Math.min(currentSection + 1, 5))
+  const back = () => goTo(Math.max(currentSection - 1, 1))
 
   const uploadedDocTypes = Object.keys(existingDocs).filter(
     (k) => existingDocs[k] !== null && existingDocs[k] !== undefined
   ) as DocumentType[]
 
-  const currentSubStepLabel = SUB_STEPS.find((s) => s.n === currentStep)?.label ?? ""
+  const currentSectionMeta = SECTIONS.find((s) => s.n === currentSection) ?? SECTIONS[0]
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* ============================================================ */}
+      {/* HEADER — Top bar + Timeline de 8 pasos del viaje completo    */}
+      {/* ============================================================ */}
       <header className="bg-white border-b border-gray-200">
-        {/* Top bar: brand + acciones */}
-        <div className="max-w-5xl mx-auto px-6 h-14 flex items-center justify-between gap-4">
+        {/* Top bar con brand y "Guardar y salir" */}
+        <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
-            <Link href="/cliente" className="text-[#1b38e8] font-bold tracking-tight">
+            <Link href="/cliente" className="text-[#1b38e8] font-bold tracking-tight text-base">
               WORCAP
             </Link>
             <span className="text-gray-300">|</span>
-            <span className="text-sm text-gray-700 truncate">
+            <span className="text-sm text-gray-600 truncate">
               {client?.legal_name && client.legal_name !== "__pendiente__"
                 ? client.legal_name
                 : "Tu solicitud"}
@@ -102,127 +102,163 @@ export function OnboardingWizard({
 
           <Link
             href="/cliente"
-            className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+            className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors"
           >
             <LogOut className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">Guardar y salir</span>
           </Link>
         </div>
 
-        {/* Timeline global de 8 pasos */}
-        <div className="max-w-5xl mx-auto px-6 pb-4">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5">
-              {GLOBAL_STEPS.map((_, idx) => (
-                <GlobalDot key={idx} idx={idx} currentGlobalIdx={0} />
+        {/* Timeline del viaje completo de 8 pasos */}
+        <div className="max-w-6xl mx-auto px-6 py-4 border-t border-gray-100">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-1.5 shrink-0">
+              {JOURNEY_STEPS.map((_, idx) => (
+                <JourneyDot key={idx} idx={idx} currentIdx={0} />
               ))}
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-gray-900">
-                Paso 1 de 8 · {GLOBAL_STEPS[0]}
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-medium text-[#1b38e8] uppercase tracking-wide">
+                Paso 1 de 8
               </p>
-              <p className="text-[11px] text-gray-500">
-                Estás completando los datos iniciales de tu solicitud
+              <p className="text-sm font-semibold text-gray-900 truncate">
+                {JOURNEY_STEPS[0]}
               </p>
             </div>
-            <span className="hidden sm:block text-xs text-gray-500 shrink-0">
-              {Math.round(subProgress)}% del paso 1
-            </span>
           </div>
         </div>
-
-        {/* Breadcrumb discreto: sub-pasos del paso 1 */}
-        <nav
-          aria-label="Secciones del paso 1"
-          className="max-w-5xl mx-auto px-6 pb-3 border-t border-gray-100 pt-3"
-        >
-          <ol className="flex items-center gap-1 overflow-x-auto text-[11px]">
-            {SUB_STEPS.map((s, idx) => {
-              const isCurrent = currentStep === s.n
-              const isDone = maxReachedStep > s.n
-              const isReachable = s.n <= maxReachedStep
-              return (
-                <li key={s.n} className="flex items-center gap-1 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => isReachable && goTo(s.n)}
-                    disabled={!isReachable}
-                    className={`px-2 py-0.5 rounded transition ${
-                      isCurrent
-                        ? "text-[#1b38e8] font-semibold"
-                        : isDone
-                        ? "text-gray-700 hover:bg-gray-100"
-                        : "text-gray-400 cursor-not-allowed"
-                    }`}
-                  >
-                    {s.n}. {s.label}
-                  </button>
-                  {idx < SUB_STEPS.length - 1 && (
-                    <span className="text-gray-300 select-none">›</span>
-                  )}
-                </li>
-              )
-            })}
-          </ol>
-        </nav>
       </header>
 
-      <main className="max-w-3xl mx-auto px-6 py-8">
-        {/* Contextualizar dentro del paso 1 */}
-        <div className="mb-4 flex items-center justify-between">
-          <h1 className="text-xl font-semibold text-gray-900">{currentSubStepLabel}</h1>
-          <span className="text-xs text-gray-500">
-            {currentStep} de 5
-          </span>
-        </div>
+      {/* ============================================================ */}
+      {/* MAIN — Layout de 2 columnas: checklist + contenido           */}
+      {/* ============================================================ */}
+      <main className="max-w-6xl mx-auto px-6 py-8">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          {/* Columna izquierda: checklist vertical */}
+          <aside className="lg:col-span-4">
+            <div className="lg:sticky lg:top-6">
+              <div className="mb-4">
+                <h2 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
+                  Para completar este paso
+                </h2>
+                <p className="text-sm text-gray-600">
+                  Completá las secciones en orden. Podés volver a cualquiera cuando quieras.
+                </p>
+              </div>
 
-        <div className="bg-white border border-gray-200 rounded-lg p-6 md:p-8">
-          {currentStep === 1 && <StepClientType client={client} onDone={() => next()} />}
-          {currentStep === 2 && <StepGeneralData client={client} onDone={() => next()} />}
-          {currentStep === 3 && (
-            <StepCompanyStructure client={client} members={members} onDone={() => next()} />
-          )}
-          {currentStep === 4 && client && (
-            <StepDocumentation
-              client={client}
-              applicationId={applicationId}
-              applicationNumber={applicationNumber}
-              existingDocs={existingDocs}
-              onDone={() => next()}
-            />
-          )}
-          {currentStep === 5 && client && (
-            <StepReview client={client} members={members} uploadedDocTypes={uploadedDocTypes} />
-          )}
-        </div>
+              <ol className="space-y-1">
+                {SECTIONS.map((s) => {
+                  const isCurrent = currentSection === s.n
+                  const isDone = maxReachedSection > s.n
+                  const isReachable = s.n <= maxReachedSection
 
-        {currentStep > 1 && (
-          <div className="mt-4 flex justify-between">
-            <button
-              type="button"
-              onClick={back}
-              className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-            >
-              <ChevronLeft className="h-4 w-4" />
-              Anterior
-            </button>
-          </div>
-        )}
+                  return (
+                    <li key={s.n}>
+                      <button
+                        type="button"
+                        onClick={() => isReachable && goTo(s.n)}
+                        disabled={!isReachable}
+                        className={`w-full text-left flex items-start gap-3 p-3 rounded-lg transition-all ${
+                          isCurrent
+                            ? "bg-[#eff3ff] border border-[#1b38e8]/20"
+                            : isReachable
+                            ? "hover:bg-white hover:border hover:border-gray-200 border border-transparent"
+                            : "opacity-50 cursor-not-allowed border border-transparent"
+                        }`}
+                      >
+                        <div className="shrink-0 mt-0.5">
+                          {isDone ? (
+                            <div className="h-5 w-5 rounded-full bg-[#1b38e8] flex items-center justify-center">
+                              <Check className="h-3 w-3 text-white" strokeWidth={3} />
+                            </div>
+                          ) : isCurrent ? (
+                            <div className="h-5 w-5 rounded-full border-2 border-[#1b38e8] flex items-center justify-center">
+                              <div className="h-2 w-2 rounded-full bg-[#1b38e8]" />
+                            </div>
+                          ) : (
+                            <Circle className="h-5 w-5 text-gray-300" strokeWidth={1.5} />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p
+                            className={`text-sm ${
+                              isCurrent
+                                ? "font-semibold text-gray-900"
+                                : isDone
+                                ? "text-gray-900"
+                                : "text-gray-600"
+                            }`}
+                          >
+                            {s.title}
+                          </p>
+                          <p className="text-xs text-gray-500 mt-0.5">{s.hint}</p>
+                        </div>
+                      </button>
+                    </li>
+                  )
+                })}
+              </ol>
+            </div>
+          </aside>
+
+          {/* Columna derecha: contenido del sub-paso actual */}
+          <section className="lg:col-span-8">
+            <div className="mb-5">
+              <h1 className="text-2xl font-semibold text-gray-900">
+                {currentSectionMeta.title}
+              </h1>
+              <p className="mt-1 text-sm text-gray-600">{currentSectionMeta.hint}</p>
+            </div>
+
+            <div className="bg-white border border-gray-200 rounded-xl p-6 md:p-8">
+              {currentSection === 1 && <StepClientType client={client} onDone={() => next()} />}
+              {currentSection === 2 && <StepGeneralData client={client} onDone={() => next()} />}
+              {currentSection === 3 && (
+                <StepCompanyStructure client={client} members={members} onDone={() => next()} />
+              )}
+              {currentSection === 4 && client && (
+                <StepDocumentation
+                  client={client}
+                  applicationId={applicationId}
+                  applicationNumber={applicationNumber}
+                  existingDocs={existingDocs}
+                  onDone={() => next()}
+                />
+              )}
+              {currentSection === 5 && client && (
+                <StepReview client={client} members={members} uploadedDocTypes={uploadedDocTypes} />
+              )}
+            </div>
+
+            {currentSection > 1 && (
+              <div className="mt-4">
+                <button
+                  type="button"
+                  onClick={back}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Volver
+                </button>
+              </div>
+            )}
+          </section>
+        </div>
       </main>
     </div>
   )
 }
 
 // ============================================================
-// Dot para el timeline global de 8 pasos
+// SUB-COMPONENTES
 // ============================================================
 
-function GlobalDot({ idx, currentGlobalIdx }: { idx: number; currentGlobalIdx: number }) {
-  if (idx < currentGlobalIdx) {
-    return <span className="h-1.5 w-1.5 rounded-full bg-[#1b38e8]" />
+function JourneyDot({ idx, currentIdx }: { idx: number; currentIdx: number }) {
+  if (idx < currentIdx) {
+    return <span className="h-2 w-2 rounded-full bg-[#1b38e8]" />
   }
-  if (idx === currentGlobalIdx) {
-    return <span className="h-1.5 w-1.5 rounded-full bg-[#1b38e8] ring-2 ring-[#c7d0fb]" />
+  if (idx === currentIdx) {
+    return <span className="h-2 w-2 rounded-full bg-[#1b38e8] ring-2 ring-[#c7d0fb]" />
   }
-  return <span className="h-1.5 w-1.5 rounded-full bg-gray-200" />
+  return <span className="h-2 w-2 rounded-full bg-gray-200" />
 }
