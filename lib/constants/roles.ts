@@ -42,7 +42,7 @@ export const CLIENT_TYPES = [
   "srl",
   "sa",
   "cooperativa",
-  "entidad_financiera",
+  "mutual",
 ] as const
 export type ClientType = (typeof CLIENT_TYPES)[number]
 
@@ -52,7 +52,7 @@ export const CLIENT_TYPE_LABELS: Record<ClientType, string> = {
   srl: "SRL",
   sa: "SA",
   cooperativa: "Cooperativa",
-  entidad_financiera: "Entidad Financiera",
+  mutual: "Mutual",
 }
 
 // ============================================================
@@ -260,13 +260,13 @@ export const REQUIRED_DOCS_BY_CLIENT_TYPE: Record<ClientType, DocumentType[]> = 
     "estado_contable_ultimo",
     "extracto_bancario",
   ],
-  entidad_financiera: [
+  mutual: [
     "dni_titular",
     "constancia_afip",
     "estatuto_social",
-    "balance",
+    "actas",
     "estado_contable_ultimo",
-    "estado_contable_anterior",
+    "extracto_bancario",
   ],
 }
 
@@ -444,15 +444,8 @@ export function getStatusBucket(status: ApplicationStatus): StatusBucket {
 
 /**
  * Timeline de 8 pasos del proceso del legajo.
- *
- * 1. Completar tus datos (onboarding)
- * 2. Documentación inicial
- * 3. Análisis inicial (analista)
- * 4. Elegí tu línea de fondeo
- * 5. Documentación adicional
- * 6. Revisión económico-financiera (analista)
- * 7. Análisis crediticio (analista)
- * 8. Resultado
+ * Los labels en idioma del cliente viven en los componentes de UI.
+ * Acá los shortLabel quedan técnicos para uso interno/fallback.
  */
 export const TIMELINE_STEPS = [
   { bucket: "draft", label: "Completar tus datos", shortLabel: "Datos" },
