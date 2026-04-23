@@ -9,41 +9,71 @@ type Variant = "compact" | "full"
 
 type Props = {
   status: ApplicationStatus
-  /**
-   * compact = 8 dots + label del paso actual al costado (default)
-   * full    = 8 dots con labels debajo (uso especial, más espacio)
-   */
   variant?: Variant
 }
 
 /**
- * Mini-timeline visual del legajo.
+ * Mini-timeline visual del legajo en idioma del cliente.
  *
- * Muestra los 8 pasos como dots:
- *  - Completados (anteriores al actual): azul sólido
- *  - Actual: azul con ring
- *  - Futuros: gris
- *  - Si el legajo terminó en rejected/cancelled: el último dot va rojo/gris sin ring
+ * Los 8 pasos alternan entre acciones del cliente y acciones de WORCAP:
+ *  1. Contanos sobre vos          (cliente)
+ *  2. Subí tu documentación       (cliente)
+ *  3. Revisamos tus documentos    (worcap)
+ *  4. Elegí tu línea de crédito   (cliente)
+ *  5. Sumá la documentación...    (cliente)
+ *  6. Revisamos lo que sumaste    (worcap)
+ *  7. Analizamos tu solicitud     (worcap)
+ *  8. Tenés una respuesta         (worcap)
  *
- * Se renderiza en línea con la info del legajo en bandejas y listas.
+ * Estados visuales:
+ *  - Completados: dot azul sólido
+ *  - Actual: dot azul con ring
+ *  - Futuros: dot gris
+ *  - Aprobado: todos los dots verdes, último con ring verde
+ *  - Rechazado/cancelado: último dot rojo con ring rojo
  */
+
+// Labels en idioma del cliente alineados al índice de TIMELINE_STEPS
+const CLIENT_LABELS: string[] = [
+  "Contanos sobre vos",
+  "Subí tu documentación",
+  "Revisamos tus documentos",
+  "Elegí tu línea de crédito",
+  "Sumá la documentación de tu línea",
+  "Revisamos lo que sumaste",
+  "Analizamos tu solicitud",
+  "Tenés una respuesta",
+]
+
+// Versión corta para la variante full (labels debajo de cada dot)
+const CLIENT_LABELS_SHORT: string[] = [
+  "Tus datos",
+  "Documentación",
+  "Revisión",
+  "Línea",
+  "Completar",
+  "Verificación",
+  "Análisis",
+  "Respuesta",
+]
+
 export function LegajoMiniTimeline({ status, variant = "compact" }: Props) {
   const bucket = getStatusBucket(status)
   const currentIdx = getTimelineIndex(bucket)
   const isRejected = bucket === "rejected" || bucket === "cancelled"
   const isApproved = bucket === "approved"
 
-  const currentStep = TIMELINE_STEPS[currentIdx]
+  const currentStepLabel = CLIENT_LABELS[Math.min(currentIdx, CLIENT_LABELS.length - 1)]
 
   if (variant === "full") {
     return (
       <div className="flex items-start gap-0">
-        {TIMELINE_STEPS.map((step, idx) => (
+        {TIMELINE_STEPS.map((_step, idx) => (
           <StepFullItem
-            key={step.bucket}
+            key={idx}
             idx={idx}
             currentIdx={currentIdx}
-            label={step.shortLabel}
+            label={CLIENT_LABELS_SHORT[idx] ?? ""}
             isRejected={isRejected}
             isApproved={isApproved}
             isLast={idx === TIMELINE_STEPS.length - 1}
@@ -53,13 +83,12 @@ export function LegajoMiniTimeline({ status, variant = "compact" }: Props) {
     )
   }
 
-  // Compact
   return (
     <div className="flex items-center gap-2">
       <div className="flex items-center gap-1">
-        {TIMELINE_STEPS.map((step, idx) => (
+        {TIMELINE_STEPS.map((_step, idx) => (
           <Dot
-            key={step.bucket}
+            key={idx}
             idx={idx}
             currentIdx={currentIdx}
             isRejected={isRejected}
@@ -68,8 +97,7 @@ export function LegajoMiniTimeline({ status, variant = "compact" }: Props) {
         ))}
       </div>
       <span className="text-[10px] text-gray-500">
-        Paso {Math.min(currentIdx + 1, TIMELINE_STEPS.length)}
-        {currentStep ? `: ${currentStep.shortLabel}` : ""}
+        Paso {Math.min(currentIdx + 1, TIMELINE_STEPS.length)}: {currentStepLabel}
       </span>
     </div>
   )
@@ -95,26 +123,17 @@ function Dot({
   const isFuture = idx > currentIdx
   const isLastStep = idx === 7
 
-  // Caso especial: si el legajo está aprobado, todos los dots completos + el último con ring verde
   if (isApproved) {
-    if (isLastStep) {
-      return <span className="h-1.5 w-1.5 rounded-full bg-emerald-600 ring-2 ring-emerald-200" />
-    }
+    if (isLastStep) return <span className="h-1.5 w-1.5 rounded-full bg-emerald-600 ring-2 ring-emerald-200" />
     return <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
   }
 
-  // Caso especial: si terminó rechazado/cancelado, el último dot rojo
   if (isRejected) {
-    if (isLastStep) {
-      return <span className="h-1.5 w-1.5 rounded-full bg-red-600 ring-2 ring-red-200" />
-    }
-    if (idx < currentIdx) {
-      return <span className="h-1.5 w-1.5 rounded-full bg-gray-400" />
-    }
+    if (isLastStep) return <span className="h-1.5 w-1.5 rounded-full bg-red-600 ring-2 ring-red-200" />
+    if (idx < currentIdx) return <span className="h-1.5 w-1.5 rounded-full bg-gray-400" />
     return <span className="h-1.5 w-1.5 rounded-full bg-gray-200" />
   }
 
-  // Flujo normal
   if (isCompleted) return <span className="h-1.5 w-1.5 rounded-full bg-[#1b38e8]" />
   if (isCurrent) return <span className="h-1.5 w-1.5 rounded-full bg-[#1b38e8] ring-2 ring-[#c7d0fb]" />
   if (isFuture) return <span className="h-1.5 w-1.5 rounded-full bg-gray-200" />
