@@ -1,19 +1,21 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { toast } from "sonner"
 import {
   FileText,
-  Eye,
   CheckCircle2,
   XCircle,
   CircleDashed,
   AlertCircle,
   Loader2,
-  X,
-  Download,
+  ChevronLeft,
+  ChevronRight,
+  ExternalLink,
+  Image as ImageIcon,
+  FileIcon,
 } from "lucide-react"
-import { getAdditionalDocumentSignedUrlAction } from "@/lib/actions/additional-documents"
+import { getStaffDocumentSignedUrlAction } from "@/lib/actions/staff-documents"
 import { DOCUMENT_TYPE_LABELS, type DocumentType } from "@/lib/constants/roles"
 
 type Doc = {
@@ -40,215 +42,382 @@ type Props = {
   additionalRequests: AddlReq[]
 }
 
-export function LegajoDocumentosPanel({ documents, additionalRequests }: Props) {
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
-  const [previewName, setPreviewName] = useState<string | null>(null)
-  const [loadingDocId, setLoadingDocId] = useState<string | null>(null)
-
-  const initialDocs = documents.filter((d) => d.doc_phase === "initial")
-  const additionalDocs = documents.filter((d) => d.doc_phase === "additional")
-
-  const additionalWithMeta = additionalRequests.map((req) => {
-    const doc = additionalDocs.find((d) => d.id === req.fulfilled_by_document_id)
-    return { req, doc }
-  })
-
-  const handleView = async (docId: string, fileName: string) => {
-    setLoadingDocId(docId)
-    try {
-      const res = await getAdditionalDocumentSignedUrlAction(docId)
-      if (!res.ok || !res.data) {
-        toast.error(res.ok ? "No pudimos abrir el archivo" : res.error)
-        return
-      }
-      setPreviewUrl(res.data.url)
-      setPreviewName(fileName)
-    } catch {
-      toast.error("Error abriendo el archivo")
-    } finally {
-      setLoadingDocId(null)
-    }
-  }
-
-  const closePreview = () => {
-    setPreviewUrl(null)
-    setPreviewName(null)
-  }
-
-  const modalLinkClass = "p-2 rounded-md hover:bg-gray-100 text-gray-600 transition-colors"
-
-  return (
-    <>
-      <aside className="rounded-xl border border-gray-200 bg-white overflow-hidden sticky top-20">
-        <div className="px-4 py-2.5 border-b border-gray-100">
-          <h2 className="text-xs font-medium text-gray-500 uppercase tracking-wide">Documentos</h2>
-        </div>
-
-        {initialDocs.length > 0 && (
-          <div>
-            <div className="px-4 py-2 bg-gray-50 border-b border-gray-100">
-              <p className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">Iniciales ({initialDocs.length})</p>
-            </div>
-            <ul className="divide-y divide-gray-100">
-              {initialDocs.map((d) => {
-                const label = DOCUMENT_TYPE_LABELS[d.document_type as DocumentType] ?? d.document_type
-                return (
-                  <DocRow
-                    key={d.id}
-                    id={d.id}
-                    label={label}
-                    fileName={d.file_name}
-                    status={d.status}
-                    onView={() => handleView(d.id, d.file_name)}
-                    loading={loadingDocId === d.id}
-                  />
-                )
-              })}
-            </ul>
-          </div>
-        )}
-
-        {additionalRequests.length > 0 && (
-          <div>
-            <div className="px-4 py-2 bg-gray-50 border-b border-t border-gray-100">
-              <p className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">Adicionales ({additionalRequests.length})</p>
-            </div>
-            <ul className="divide-y divide-gray-100">
-              {additionalWithMeta.map(({ req, doc }) => (
-                <AddlDocRow
-                  key={req.id}
-                  name={req.document_name}
-                  isRequired={req.is_required}
-                  reqStatus={req.status}
-                  doc={doc}
-                  onView={doc ? () => handleView(doc.id, doc.file_name) : undefined}
-                  loading={doc ? loadingDocId === doc.id : false}
-                />
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {initialDocs.length === 0 && additionalRequests.length === 0 && (
-          <div className="p-6 text-center">
-            <FileText className="h-8 w-8 text-gray-300 mx-auto mb-2" />
-            <p className="text-xs text-gray-500">No hay documentos cargados.</p>
-          </div>
-        )}
-      </aside>
-
-      {previewUrl ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" onClick={closePreview}>
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl h-[85vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200">
-              <p className="text-sm font-medium text-gray-900 truncate pr-3">{previewName}</p>
-              <div className="flex items-center gap-1">
-                <a href={previewUrl} target="_blank" rel="noopener noreferrer" title="Abrir en nueva pestaña" className={modalLinkClass}>
-                  <Download className="h-4 w-4" />
-                </a>
-                <button type="button" onClick={closePreview} title="Cerrar" className={modalLinkClass}>
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-            <div className="flex-1 bg-gray-50">
-              <iframe src={previewUrl} className="w-full h-full" title={previewName ?? "Documento"} />
-            </div>
-          </div>
-        </div>
-      ) : null}
-    </>
-  )
-}
-
-function DocRow({
-  label,
-  fileName,
-  status,
-  onView,
-  loading,
-}: {
-  id: string
+type DocItem = {
+  docId: string
   label: string
   fileName: string
   status: "pending" | "uploaded" | "approved" | "rejected"
-  onView: () => void
-  loading: boolean
-}) {
-  return (
-    <li className="px-4 py-2.5 hover:bg-gray-50 transition-colors">
-      <div className="flex items-start gap-2.5">
-        <div className="shrink-0 mt-0.5">{getStatusIcon(status)}</div>
-        <div className="flex-1 min-w-0">
-          <p className="text-xs font-medium text-gray-900 truncate">{label}</p>
-          <p className="text-[11px] text-gray-500 truncate font-mono">{fileName}</p>
-          <button
-            type="button"
-            onClick={onView}
-            disabled={loading || status === "pending"}
-            className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium text-[#1b38e8] hover:underline disabled:text-gray-400 disabled:no-underline disabled:cursor-not-allowed"
-          >
-            {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Eye className="h-3 w-3" />}
-            Ver
-          </button>
-        </div>
-      </div>
-    </li>
-  )
+  section: "initial" | "additional"
+  isRequired?: boolean
 }
 
-function AddlDocRow({
-  name,
-  isRequired,
-  reqStatus,
-  doc,
-  onView,
-  loading,
-}: {
-  name: string
-  isRequired: boolean
-  reqStatus: string
-  doc: Doc | undefined
-  onView?: () => void
-  loading: boolean
-}) {
-  const effectiveStatus: "pending" | "uploaded" | "approved" | "rejected" =
-    reqStatus === "approved" ? "approved" : reqStatus === "rejected" ? "rejected" : doc ? "uploaded" : "pending"
+type PreviewState = {
+  url: string
+  mimeType: string | null
+  fileName: string
+}
+
+export function LegajoDocumentosPanel({ documents, additionalRequests }: Props) {
+  // Aplanamos todos los docs subidos en una lista navegable
+  const flatList = useMemo<DocItem[]>(() => {
+    const items: DocItem[] = []
+
+    // Iniciales
+    documents
+      .filter((d) => d.doc_phase === "initial")
+      .forEach((d) => {
+        items.push({
+          docId: d.id,
+          label: DOCUMENT_TYPE_LABELS[d.document_type as DocumentType] ?? d.document_type,
+          fileName: d.file_name,
+          status: d.status,
+          section: "initial",
+        })
+      })
+
+    // Adicionales: solo los que tienen doc subido
+    additionalRequests.forEach((req) => {
+      const doc = documents.find(
+        (d) => d.doc_phase === "additional" && d.id === req.fulfilled_by_document_id
+      )
+      if (doc) {
+        const effectiveStatus =
+          req.status === "approved"
+            ? "approved"
+            : req.status === "rejected"
+            ? "rejected"
+            : "uploaded"
+        items.push({
+          docId: doc.id,
+          label: req.document_name,
+          fileName: doc.file_name,
+          status: effectiveStatus as DocItem["status"],
+          section: "additional",
+          isRequired: req.is_required,
+        })
+      }
+    })
+
+    return items
+  }, [documents, additionalRequests])
+
+  // También guardamos los adicionales pendientes (sin doc) para mostrarlos como placeholders
+  const pendingAddl = useMemo(() => {
+    return additionalRequests.filter((r) => !r.fulfilled_by_document_id)
+  }, [additionalRequests])
+
+  const [selectedIdx, setSelectedIdx] = useState<number>(0)
+  const [preview, setPreview] = useState<PreviewState | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const selected = flatList[selectedIdx]
+
+  // Al seleccionar un doc, pedimos su URL firmada
+  useEffect(() => {
+    if (!selected) {
+      setPreview(null)
+      return
+    }
+
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+
+    getStaffDocumentSignedUrlAction(selected.docId)
+      .then((res) => {
+        if (cancelled) return
+        if (!res.ok || !res.data) {
+          setError(res.ok ? "No pudimos abrir el archivo" : res.error)
+          setPreview(null)
+          return
+        }
+        setPreview({
+          url: res.data.url,
+          mimeType: res.data.mime_type,
+          fileName: res.data.file_name,
+        })
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setError("Error abriendo el archivo")
+          setPreview(null)
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [selected])
+
+  // Navegación con teclado (flechas)
+  useEffect(() => {
+    function handler(e: KeyboardEvent) {
+      // Solo si el foco no está en un input/textarea
+      const tag = (e.target as HTMLElement)?.tagName
+      if (tag === "INPUT" || tag === "TEXTAREA") return
+
+      if (e.key === "ArrowDown" || e.key === "ArrowRight") {
+        e.preventDefault()
+        setSelectedIdx((idx) => Math.min(idx + 1, flatList.length - 1))
+      } else if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
+        e.preventDefault()
+        setSelectedIdx((idx) => Math.max(idx - 1, 0))
+      }
+    }
+
+    document.addEventListener("keydown", handler)
+    return () => document.removeEventListener("keydown", handler)
+  }, [flatList.length])
+
+  if (flatList.length === 0 && pendingAddl.length === 0) {
+    return (
+      <section className="rounded-xl border border-gray-200 bg-white p-12 text-center">
+        <FileText className="h-10 w-10 text-gray-300 mx-auto mb-2" />
+        <p className="text-sm text-gray-500">No hay documentos cargados.</p>
+      </section>
+    )
+  }
+
+  const initialItems = flatList.filter((i) => i.section === "initial")
+  const additionalItems = flatList.filter((i) => i.section === "additional")
 
   return (
-    <li className="px-4 py-2.5 hover:bg-gray-50 transition-colors">
-      <div className="flex items-start gap-2.5">
-        <div className="shrink-0 mt-0.5">{getStatusIcon(effectiveStatus)}</div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5">
-            <p className="text-xs font-medium text-gray-900 truncate">{name}</p>
-            {!isRequired && <span className="text-[9px] text-gray-500">(opcional)</span>}
+    <section className="grid grid-cols-12 gap-4">
+      {/* Lista de docs (izquierda) */}
+      <div className="col-span-12 md:col-span-4 lg:col-span-3">
+        <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+          <div className="px-4 py-2.5 border-b border-gray-100">
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+              Documentos ({flatList.length})
+            </p>
           </div>
-          {doc ? (
+
+          {initialItems.length > 0 && (
             <>
-              <p className="text-[11px] text-gray-500 truncate font-mono">{doc.file_name}</p>
-              <button
-                type="button"
-                onClick={onView}
-                disabled={loading}
-                className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium text-[#1b38e8] hover:underline disabled:text-gray-400 disabled:cursor-not-allowed"
-              >
-                {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Eye className="h-3 w-3" />}
-                Ver
-              </button>
+              <SectionLabel>Iniciales ({initialItems.length})</SectionLabel>
+              <ul className="divide-y divide-gray-100">
+                {initialItems.map((item) => {
+                  const idx = flatList.indexOf(item)
+                  return (
+                    <DocListItem
+                      key={item.docId}
+                      item={item}
+                      selected={idx === selectedIdx}
+                      onSelect={() => setSelectedIdx(idx)}
+                    />
+                  )
+                })}
+              </ul>
             </>
-          ) : (
-            <p className="mt-0.5 text-[11px] text-gray-400 italic">No subido todavía</p>
+          )}
+
+          {additionalItems.length > 0 && (
+            <>
+              <SectionLabel>Adicionales ({additionalItems.length})</SectionLabel>
+              <ul className="divide-y divide-gray-100">
+                {additionalItems.map((item) => {
+                  const idx = flatList.indexOf(item)
+                  return (
+                    <DocListItem
+                      key={item.docId}
+                      item={item}
+                      selected={idx === selectedIdx}
+                      onSelect={() => setSelectedIdx(idx)}
+                    />
+                  )
+                })}
+              </ul>
+            </>
+          )}
+
+          {pendingAddl.length > 0 && (
+            <>
+              <SectionLabel>Pendientes ({pendingAddl.length})</SectionLabel>
+              <ul className="divide-y divide-gray-100">
+                {pendingAddl.map((req) => (
+                  <li key={req.id} className="px-3 py-2">
+                    <div className="flex items-start gap-2">
+                      <CircleDashed className="h-3.5 w-3.5 text-gray-300 shrink-0 mt-0.5" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-gray-600 truncate">{req.document_name}</p>
+                        <p className="text-[10px] text-gray-400 italic">No subido todavía</p>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </>
           )}
         </div>
       </div>
+
+      {/* Preview grande (derecha) */}
+      <div className="col-span-12 md:col-span-8 lg:col-span-9">
+        <div className="rounded-xl border border-gray-200 bg-white overflow-hidden flex flex-col" style={{ minHeight: "600px" }}>
+          {selected ? (
+            <>
+              {/* Toolbar */}
+              <div className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-gray-100 bg-gray-50/50">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedIdx((i) => Math.max(i - 1, 0))}
+                    disabled={selectedIdx === 0}
+                    className="p-1 rounded-md hover:bg-gray-100 text-gray-600 disabled:text-gray-300 disabled:cursor-not-allowed transition-colors"
+                    title="Documento anterior (←)"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedIdx((i) => Math.min(i + 1, flatList.length - 1))}
+                    disabled={selectedIdx === flatList.length - 1}
+                    className="p-1 rounded-md hover:bg-gray-100 text-gray-600 disabled:text-gray-300 disabled:cursor-not-allowed transition-colors"
+                    title="Documento siguiente (→)"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                  <div className="min-w-0 flex-1 ml-1">
+                    <p className="text-xs font-medium text-gray-900 truncate">{selected.label}</p>
+                    <p className="text-[11px] text-gray-500 truncate font-mono">{selected.fileName}</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-[11px] text-gray-500">
+                    {selectedIdx + 1} / {flatList.length}
+                  </span>
+                  {preview ? (
+                    
+                      href={preview.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="Abrir en nueva pestaña"
+                      className="p-1.5 rounded-md hover:bg-gray-100 text-gray-600 transition-colors"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </a>
+                  ) : null}
+                </div>
+              </div>
+
+              {/* Preview area */}
+              <div className="flex-1 bg-gray-100 flex items-center justify-center overflow-auto">
+                {loading ? (
+                  <div className="flex flex-col items-center gap-2 text-gray-500">
+                    <Loader2 className="h-6 w-6 animate-spin" />
+                    <p className="text-xs">Cargando documento...</p>
+                  </div>
+                ) : error ? (
+                  <div className="flex flex-col items-center gap-2 text-red-600 px-6 text-center">
+                    <AlertCircle className="h-6 w-6" />
+                    <p className="text-xs">{error}</p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        toast.dismiss()
+                        setError(null)
+                        // re-trigger
+                        setSelectedIdx((i) => i)
+                      }}
+                      className="text-xs text-[#1b38e8] hover:underline"
+                    >
+                      Reintentar
+                    </button>
+                  </div>
+                ) : preview ? (
+                  <DocumentRenderer preview={preview} />
+                ) : null}
+              </div>
+            </>
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center text-gray-400 p-8">
+              <FileText className="h-10 w-10 mb-2" />
+              <p className="text-sm">Seleccioná un documento para previsualizar</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+// ============================================================
+// SUB-COMPONENTES
+// ============================================================
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="px-4 py-1.5 bg-gray-50 border-b border-t border-gray-100">
+      <p className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">{children}</p>
+    </div>
+  )
+}
+
+function DocListItem({
+  item,
+  selected,
+  onSelect,
+}: {
+  item: DocItem
+  selected: boolean
+  onSelect: () => void
+}) {
+  const isImage = /\.(jpe?g|png|webp|gif)$/i.test(item.fileName)
+  const TypeIcon = isImage ? ImageIcon : FileIcon
+
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={onSelect}
+        className={`w-full text-left px-3 py-2 transition-colors flex items-start gap-2 ${
+          selected ? "bg-[#eff3ff] border-l-2 border-[#1b38e8]" : "hover:bg-gray-50 border-l-2 border-transparent"
+        }`}
+      >
+        <div className="shrink-0 mt-0.5">{getStatusIcon(item.status)}</div>
+        <div className="flex-1 min-w-0">
+          <p className={`text-xs font-medium truncate ${selected ? "text-[#1b38e8]" : "text-gray-900"}`}>
+            {item.label}
+            {item.isRequired === false ? <span className="text-[9px] text-gray-400 ml-1">(opcional)</span> : null}
+          </p>
+          <p className="text-[10px] text-gray-500 truncate flex items-center gap-1 font-mono">
+            <TypeIcon className="h-2.5 w-2.5 shrink-0" />
+            {item.fileName}
+          </p>
+        </div>
+      </button>
     </li>
   )
 }
 
-function getStatusIcon(status: "pending" | "uploaded" | "approved" | "rejected"): React.ReactNode {
-  if (status === "approved") return <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-  if (status === "rejected") return <XCircle className="h-4 w-4 text-red-600" />
-  if (status === "uploaded") return <AlertCircle className="h-4 w-4 text-amber-500" />
-  return <CircleDashed className="h-4 w-4 text-gray-300" />
+function DocumentRenderer({ preview }: { preview: PreviewState }) {
+  const isImage =
+    (preview.mimeType && preview.mimeType.startsWith("image/")) ||
+    /\.(jpe?g|png|webp|gif)$/i.test(preview.fileName)
+
+  if (isImage) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return (
+      <img
+        src={preview.url}
+        alt={preview.fileName}
+        className="max-w-full max-h-full object-contain"
+      />
+    )
+  }
+
+  // PDFs y otros: iframe
+  return <iframe src={preview.url} className="w-full h-full bg-white" title={preview.fileName} />
+}
+
+function getStatusIcon(status: "pending" | "uploaded" | "approved" | "rejected") {
+  if (status === "approved") return <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+  if (status === "rejected") return <XCircle className="h-3.5 w-3.5 text-red-600" />
+  if (status === "uploaded") return <AlertCircle className="h-3.5 w-3.5 text-amber-500" />
+  return <CircleDashed className="h-3.5 w-3.5 text-gray-300" />
 }
