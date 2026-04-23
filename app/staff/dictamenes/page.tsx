@@ -20,6 +20,7 @@ import {
   type FundingLine,
 } from "@/lib/constants/roles"
 import { DictamenesTabs } from "@/components/staff/dictamenes-tabs"
+import { LegajoMiniTimeline } from "@/components/staff/legajo-mini-timeline"
 
 type SearchParams = {
   tab?: string
@@ -69,7 +70,7 @@ export default async function DictamenesPage({
     | "pendientes"
     | "emitidos"
 
-  // ===== Pendientes: legajos en análisis crediticio sin dictamen todavía =====
+  // ===== Pendientes =====
   const { data: rawPendientes } = await supabase
     .from("applications")
     .select(
@@ -101,7 +102,7 @@ export default async function DictamenesPage({
     }
   })
 
-  // ===== Emitidos: dictámenes firmados (filtra por analista si aplica) =====
+  // ===== Emitidos =====
   let emitidosQuery = supabase
     .from("dictamenes")
     .select(
@@ -117,6 +118,7 @@ export default async function DictamenesPage({
         application:applications!inner(
           id,
           application_number,
+          status,
           client:clients!inner(legal_name, cuit)
         )
       `
@@ -148,6 +150,7 @@ export default async function DictamenesPage({
         ? {
             id: app.id,
             application_number: app.application_number,
+            status: app.status as ApplicationStatus,
             client: appClient,
           }
         : null,
@@ -229,7 +232,7 @@ function PendientesSection({
             href={`/staff/legajo/${app.id}`}
             className="flex items-center gap-4 p-4 hover:bg-gray-50 transition-colors"
           >
-            <div className="flex-1 min-w-0">
+            <div className="flex-1 min-w-0 space-y-1.5">
               <div className="flex items-center gap-2.5 flex-wrap">
                 <p className="font-mono font-semibold text-sm text-gray-900">
                   {app.application_number}
@@ -249,10 +252,11 @@ function PendientesSection({
                   </span>
                 )}
               </div>
-              <h3 className="mt-1 font-semibold text-gray-900 text-sm truncate">
+              <h3 className="font-semibold text-gray-900 text-sm truncate">
                 {app.client?.legal_name ?? "(Sin empresa)"}
               </h3>
-              <div className="mt-0.5 flex items-center gap-3 text-xs text-gray-500 flex-wrap">
+              <LegajoMiniTimeline status={app.status} />
+              <div className="flex items-center gap-3 text-xs text-gray-500 flex-wrap">
                 {app.client && (
                   <span className="font-mono">CUIT {app.client.cuit}</span>
                 )}
@@ -296,6 +300,7 @@ function EmitidosSection({
     application: {
       id: string
       application_number: string
+      status: ApplicationStatus
       client: { legal_name: string; cuit: string } | null
     } | null
   }>
@@ -338,7 +343,7 @@ function EmitidosSection({
               <DecisionIcon className={`h-5 w-5 ${decisionMeta.text}`} />
             </div>
 
-            <div className="flex-1 min-w-0">
+            <div className="flex-1 min-w-0 space-y-1.5">
               <div className="flex items-center gap-2.5 flex-wrap">
                 {d.application && (
                   <p className="font-mono font-semibold text-sm text-gray-900">
@@ -357,11 +362,13 @@ function EmitidosSection({
                 )}
               </div>
 
-              <h3 className="mt-1 font-semibold text-gray-900 text-sm truncate">
+              <h3 className="font-semibold text-gray-900 text-sm truncate">
                 {d.application?.client?.legal_name ?? "(Cliente)"}
               </h3>
 
-              <div className="mt-0.5 flex items-center gap-3 text-xs text-gray-500 flex-wrap">
+              {d.application ? <LegajoMiniTimeline status={d.application.status} /> : null}
+
+              <div className="flex items-center gap-3 text-xs text-gray-500 flex-wrap">
                 {d.application?.client && (
                   <span className="font-mono">
                     CUIT {d.application.client.cuit}
