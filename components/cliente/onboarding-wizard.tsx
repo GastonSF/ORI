@@ -30,7 +30,6 @@ type Props = {
   existingDocs: Record<string, ExistingDoc>
 }
 
-// Secciones internas del paso 1 del viaje completo
 const SECTIONS = [
   { n: 1, title: "Tu empresa", hint: "Qué tipo de organización sos" },
   { n: 2, title: "Datos generales", hint: "Información de contacto y fiscal" },
@@ -39,7 +38,6 @@ const SECTIONS = [
   { n: 5, title: "Revisión y envío", hint: "Todo en orden, lo enviás" },
 ]
 
-// Los 8 pasos del viaje completo en voz del cliente
 const JOURNEY_STEPS = [
   "Contanos sobre vos",
   "Subí tu documentación",
@@ -61,18 +59,33 @@ export function OnboardingWizard({
 }: Props) {
   const router = useRouter()
   const [currentSection, setCurrentSection] = useState(initialStep)
-  const maxReachedSection = client?.onboarding_step ?? 1
+  // Guardamos localmente el máximo alcanzado, se incrementa apenas onDone se dispara
+  const [localMaxReached, setLocalMaxReached] = useState(client?.onboarding_step ?? 1)
+  const serverMaxReached = client?.onboarding_step ?? 1
+  const maxReached = Math.max(localMaxReached, serverMaxReached)
 
-  const goTo = (section: number) => {
-    if (section <= maxReachedSection || section <= currentSection) {
+  // Salto manual (click en el checklist lateral): valida que sea alcanzable
+  const jumpTo = (section: number) => {
+    if (section <= maxReached || section <= currentSection) {
       setCurrentSection(section)
       router.replace(`/cliente/onboarding?paso=${section}`, { scroll: false })
       router.refresh()
     }
   }
 
-  const next = () => goTo(Math.min(currentSection + 1, 5))
-  const back = () => goTo(Math.max(currentSection - 1, 1))
+  // Avance automático (sub-step completado): NO valida maxReached,
+  // el server ya confirmó el save al llamar onDone
+  const advanceToNext = () => {
+    const nextSection = Math.min(currentSection + 1, 5)
+    // Actualizar el máximo alcanzado localmente para que el checklist marque
+    // la sección recién completada con tilde
+    setLocalMaxReached((prev) => Math.max(prev, nextSection))
+    setCurrentSection(nextSection)
+    router.replace(`/cliente/onboarding?paso=${nextSection}`, { scroll: false })
+    router.refresh()
+  }
+
+  const back = () => jumpTo(Math.max(currentSection - 1, 1))
 
   const uploadedDocTypes = Object.keys(existingDocs).filter(
     (k) => existingDocs[k] !== null && existingDocs[k] !== undefined
@@ -82,11 +95,7 @@ export function OnboardingWizard({
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* ============================================================ */}
-      {/* HEADER — Top bar + Timeline de 8 pasos del viaje completo    */}
-      {/* ============================================================ */}
       <header className="bg-white border-b border-gray-200">
-        {/* Top bar con brand y "Guardar y salir" */}
         <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
             <Link href="/cliente" className="text-[#1b38e8] font-bold tracking-tight text-base">
@@ -109,7 +118,6 @@ export function OnboardingWizard({
           </Link>
         </div>
 
-        {/* Timeline del viaje completo de 8 pasos */}
         <div className="max-w-6xl mx-auto px-6 py-4 border-t border-gray-100">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-1.5 shrink-0">
@@ -121,20 +129,14 @@ export function OnboardingWizard({
               <p className="text-[11px] font-medium text-[#1b38e8] uppercase tracking-wide">
                 Paso 1 de 8
               </p>
-              <p className="text-sm font-semibold text-gray-900 truncate">
-                {JOURNEY_STEPS[0]}
-              </p>
+              <p className="text-sm font-semibold text-gray-900 truncate">{JOURNEY_STEPS[0]}</p>
             </div>
           </div>
         </div>
       </header>
 
-      {/* ============================================================ */}
-      {/* MAIN — Layout de 2 columnas: checklist + contenido           */}
-      {/* ============================================================ */}
       <main className="max-w-6xl mx-auto px-6 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          {/* Columna izquierda: checklist vertical */}
           <aside className="lg:col-span-4">
             <div className="lg:sticky lg:top-6">
               <div className="mb-4">
@@ -149,14 +151,14 @@ export function OnboardingWizard({
               <ol className="space-y-1">
                 {SECTIONS.map((s) => {
                   const isCurrent = currentSection === s.n
-                  const isDone = maxReachedSection > s.n
-                  const isReachable = s.n <= maxReachedSection
+                  const isDone = maxReached > s.n
+                  const isReachable = s.n <= maxReached
 
                   return (
                     <li key={s.n}>
                       <button
                         type="button"
-                        onClick={() => isReachable && goTo(s.n)}
+                        onClick={() => isReachable && jumpTo(s.n)}
                         disabled={!isReachable}
                         className={`w-full text-left flex items-start gap-3 p-3 rounded-lg transition-all ${
                           isCurrent
@@ -201,20 +203,17 @@ export function OnboardingWizard({
             </div>
           </aside>
 
-          {/* Columna derecha: contenido del sub-paso actual */}
           <section className="lg:col-span-8">
             <div className="mb-5">
-              <h1 className="text-2xl font-semibold text-gray-900">
-                {currentSectionMeta.title}
-              </h1>
+              <h1 className="text-2xl font-semibold text-gray-900">{currentSectionMeta.title}</h1>
               <p className="mt-1 text-sm text-gray-600">{currentSectionMeta.hint}</p>
             </div>
 
             <div className="bg-white border border-gray-200 rounded-xl p-6 md:p-8">
-              {currentSection === 1 && <StepClientType client={client} onDone={() => next()} />}
-              {currentSection === 2 && <StepGeneralData client={client} onDone={() => next()} />}
+              {currentSection === 1 && <StepClientType client={client} onDone={advanceToNext} />}
+              {currentSection === 2 && <StepGeneralData client={client} onDone={advanceToNext} />}
               {currentSection === 3 && (
-                <StepCompanyStructure client={client} members={members} onDone={() => next()} />
+                <StepCompanyStructure client={client} members={members} onDone={advanceToNext} />
               )}
               {currentSection === 4 && client && (
                 <StepDocumentation
@@ -222,7 +221,7 @@ export function OnboardingWizard({
                   applicationId={applicationId}
                   applicationNumber={applicationNumber}
                   existingDocs={existingDocs}
-                  onDone={() => next()}
+                  onDone={advanceToNext}
                 />
               )}
               {currentSection === 5 && client && (
@@ -248,10 +247,6 @@ export function OnboardingWizard({
     </div>
   )
 }
-
-// ============================================================
-// SUB-COMPONENTES
-// ============================================================
 
 function JourneyDot({ idx, currentIdx }: { idx: number; currentIdx: number }) {
   if (idx < currentIdx) {
