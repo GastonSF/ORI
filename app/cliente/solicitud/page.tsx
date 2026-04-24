@@ -7,11 +7,12 @@ import {
 } from "@/lib/constants/roles"
 import {
   ArrowLeft, CheckCircle2, XCircle, MessageSquare, Mail, Phone, MapPin,
-  Building, FileText, ArrowRight,
+  Building, FileText, ArrowRight, Send,
 } from "lucide-react"
 import { CancelApplicationButton } from "@/components/cliente/cancel-application-button"
 import { ApplicationTimeline } from "@/components/cliente/application-timeline"
 import { EditContactDialog } from "@/components/cliente/edit-contact-dialog"
+import { SendDraftApplicationButton } from "@/components/cliente/send-draft-application-button"
 
 export default async function ClientApplicationPage() {
   const { user } = await requireRole("client")
@@ -59,11 +60,38 @@ export default async function ClientApplicationPage() {
   const clientCanCancel = canClientCancel(status)
   const hasComments = publicComments && publicComments.length > 0
 
+  // El legajo está en borrador (onboarding terminado pero nunca se envió)
+  const isDraft = status === "draft"
+  const canSendDraft =
+    isDraft && !!app.requested_amount && !!app.funding_line
+
   return (
     <div className="max-w-3xl mx-auto space-y-5">
       <Link href="/cliente" className="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900">
         <ArrowLeft className="h-3.5 w-3.5" /> Volver al panel
       </Link>
+
+      {/* BANNER DE ENVÍO PENDIENTE - aparece arriba del todo cuando el legajo está en draft */}
+      {canSendDraft && (
+        <section className="rounded-xl border-2 border-[#1b38e8] bg-[#1b38e8]/5 p-6">
+          <div className="flex items-start gap-4">
+            <div className="h-12 w-12 rounded-lg bg-[#1b38e8] grid place-items-center shrink-0">
+              <Send className="h-6 w-6 text-white" />
+            </div>
+            <div className="flex-1">
+              <h2 className="text-lg font-semibold text-gray-900">
+                Tu solicitud está lista pero no la enviaste
+              </h2>
+              <p className="mt-1 text-sm text-gray-700">
+                Completaste el onboarding pero tu solicitud sigue en borrador. Enviala para que WORCAP empiece a revisarla.
+              </p>
+              <div className="mt-4">
+                <SendDraftApplicationButton />
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* 1. HEADER + TIMELINE */}
       <header className="rounded-xl border border-gray-200 bg-white p-6">
@@ -282,7 +310,7 @@ export default async function ClientApplicationPage() {
       </section>
 
       {/* 6. ACCIONES */}
-      {!isFinalStatus(status) && (
+      {!isFinalStatus(status) && !isDraft && (
         <section className="rounded-xl border border-gray-200 bg-white p-6">
           <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-3">Acciones</h2>
           <Link href="/cliente/documentos"
