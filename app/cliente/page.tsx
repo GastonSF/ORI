@@ -11,6 +11,7 @@ import { CheckCircle2 } from "lucide-react"
 import { ProgressRing } from "@/components/shared/progress-ring"
 import { DashboardHero } from "@/components/cliente/dashboard-hero"
 import { ApplicationTimeline } from "@/components/cliente/application-timeline"
+import { RejectedDocsBanner } from "@/components/cliente/rejected-docs-banner"
 
 export default async function ClientDashboard() {
   const { user, profile } = await requireRole("client")
@@ -55,6 +56,59 @@ export default async function ClientDashboard() {
 
   // Usamos el activo si existe, sino el último cerrado (para mostrar resultado)
   const displayedApp = activeApp ?? lastClosedApp
+
+  // ============================================================
+  // Docs rechazados "activos" (rechazados que NO fueron re-subidos)
+  // ============================================================
+  // Query: docs con status='rejected' que no tienen hijos con
+  // source_document_id apuntando a ellos.
+  let activeRejectedDocs: Array<{
+    id: string
+    application_id: string
+    application_number: string
+    document_type: string
+    file_name: string
+    review_notes: string | null
+    reviewed_at: string | null
+  }> = []
+
+  if (client) {
+    const { data: rejRows } = await supabase
+      .from("documents")
+      .select(
+        `
+          id,
+          application_id,
+          document_type,
+          file_name,
+          review_notes,
+          reviewed_at,
+          application:applications!inner(application_number),
+          replacements:documents!documents_source_document_id_fkey(id)
+        `
+      )
+      .eq("client_id", client.id)
+      .eq("status", "rejected")
+      .order("reviewed_at", { ascending: false })
+
+    activeRejectedDocs = (rejRows ?? [])
+      .filter((d) => {
+        const reps = Array.isArray(d.replacements) ? d.replacements : []
+        return reps.length === 0
+      })
+      .map((d) => {
+        const app = Array.isArray(d.application) ? d.application[0] : d.application
+        return {
+          id: d.id,
+          application_id: d.application_id,
+          application_number: app?.application_number ?? "",
+          document_type: d.document_type as string,
+          file_name: d.file_name,
+          review_notes: d.review_notes as string | null,
+          reviewed_at: d.reviewed_at as string | null,
+        }
+      })
+  }
 
   // Conteo de documentos INICIALES
   const requiredDocs = client
@@ -107,6 +161,14 @@ export default async function ClientDashboard() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
+      {/* 0. BANNER DE DOCS RECHAZADOS - arriba del todo, lo más visible */}
+      {client && activeRejectedDocs.length > 0 ? (
+        <RejectedDocsBanner
+          rejectedDocs={activeRejectedDocs}
+          clientId={client.id}
+        />
+      ) : null}
+
       {/* 1. TIMELINE - contexto primero (solo si hay legajo) */}
       {displayedApp && (
         <section className="rounded-xl border border-gray-200 bg-white p-6">
