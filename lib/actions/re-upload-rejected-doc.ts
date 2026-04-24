@@ -12,16 +12,6 @@ export type ActionResult<T = undefined> =
 // ============================================================
 // RE-SUBIR UN DOCUMENTO RECHAZADO (cliente)
 // ============================================================
-// El cliente subió un doc, el oficial lo rechazó con motivo, y ahora
-// el cliente sube una versión corregida. Reglas:
-//
-//  - Solo el dueño del cliente puede re-subir (client role + ownership).
-//  - El doc original tiene que estar en status='rejected'.
-//  - El archivo nuevo ya fue subido al Storage por el browser; acá
-//    se crea el registro en DB vinculado al original con source_document_id.
-//  - El doc viejo queda tal cual está (histórico).
-//  - El doc nuevo arranca con status='uploaded' (vuelve al oficial a revisar).
-//  - Queda todo en audit_log.
 
 const schema = z.object({
   rejected_document_id: z.string().uuid(),
@@ -50,7 +40,6 @@ export async function reUploadRejectedDocAction(
   } = await supabase.auth.getUser()
   if (!user) return { ok: false, error: "No autenticado" }
 
-  // Validar rol cliente
   const { data: profile } = await supabase
     .from("profiles")
     .select("role, is_active, full_name")
@@ -63,7 +52,6 @@ export async function reUploadRejectedDocAction(
     return { ok: false, error: "Solo el cliente puede re-subir sus documentos" }
   }
 
-  // Traer el doc rechazado + legajo + cliente para validar ownership
   const { data: rejectedDoc, error: docErr } = await supabase
     .from("documents")
     .select(
@@ -113,8 +101,6 @@ export async function reUploadRejectedDocAction(
     ? rejectedDoc.application[0]
     : rejectedDoc.application
 
-  // Chequear que no haya otro doc nuevo ya subido para este rechazo
-  // (prevención contra doble click)
   const { data: existingReplacement } = await supabase
     .from("documents")
     .select("id")
@@ -129,7 +115,6 @@ export async function reUploadRejectedDocAction(
     }
   }
 
-  // Crear el doc nuevo vinculado al rechazado
   const { data: newDoc, error: insertErr } = await supabase
     .from("documents")
     .insert({
@@ -156,7 +141,6 @@ export async function reUploadRejectedDocAction(
     }
   }
 
-  // Log de auditoría
   const ipAddress = await getClientIp()
   const userAgent = await getUserAgent()
 
@@ -193,21 +177,19 @@ export async function reUploadRejectedDocAction(
 // ============================================================
 // LISTAR DOCS RECHAZADOS DEL CLIENTE (activos, sin reemplazo)
 // ============================================================
-// Usado por el dashboard del cliente para mostrar la card roja.
-// "Activos" = rechazados que todavía no fueron re-subidos.
+
+type RejectedDocActive = {
+  id: string
+  application_id: string
+  application_number: string
+  document_type: string
+  file_name: string
+  review_notes: string | null
+  reviewed_at: string | null
+}
 
 export async function getActiveRejectedDocsAction(): Promise
-  ActionResult
-    Array<{
-      id: string
-      application_id: string
-      application_number: string
-      document_type: string
-      file_name: string
-      review_notes: string | null
-      reviewed_at: string | null
-    }>
-  >
+  ActionResult<RejectedDocActive[]>
 > {
   const supabase = await createClient()
   const {
@@ -215,7 +197,6 @@ export async function getActiveRejectedDocsAction(): Promise
   } = await supabase.auth.getUser()
   if (!user) return { ok: false, error: "No autenticado" }
 
-  // Obtener el cliente del usuario
   const { data: clientRow } = await supabase
     .from("clients")
     .select("id")
@@ -226,7 +207,6 @@ export async function getActiveRejectedDocsAction(): Promise
     return { ok: true, data: [] }
   }
 
-  // Traer docs rechazados que NO tienen reemplazo (son los "activos")
   const { data, error } = await supabase
     .from("documents")
     .select(
@@ -247,13 +227,12 @@ export async function getActiveRejectedDocsAction(): Promise
 
   if (error) return { ok: false, error: error.message }
 
-  // Filtrar: solo los que no tienen hijos (no fueron re-subidos todavía)
   const active = (data ?? []).filter((d) => {
     const reps = Array.isArray(d.replacements) ? d.replacements : []
     return reps.length === 0
   })
 
-  const result = active.map((d) => {
+  const result: RejectedDocActive[] = active.map((d) => {
     const app = Array.isArray(d.application) ? d.application[0] : d.application
     return {
       id: d.id,
