@@ -152,4 +152,241 @@ export default async function LegajoDetallePage({
     app.status === "in_risk_analysis" || app.status === "observed"
   const isAnalystOrAdmin =
     profile.role === "analyst" || profile.role === "admin"
-  const showDictame
+  const showDictamenForm =
+    isAnalystOrAdmin && (isDictaminable || !!existingDictamen)
+
+  return (
+    <div className="space-y-5">
+      {/* Breadcrumb */}
+      <div>
+        <Link
+          href="/staff/dictamenes"
+          className="inline-flex items-center gap-1.5 text-sm text-gray-600 hover:text-[#1b38e8] transition-colors"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Volver a dictámenes
+        </Link>
+      </div>
+
+      {/* Header del legajo */}
+      <header className="rounded-xl border border-gray-200 bg-white p-5">
+        <div className="flex items-start gap-4 flex-wrap">
+          <div className="h-12 w-12 rounded-lg bg-[#eff3ff] flex items-center justify-center shrink-0">
+            <Building2 className="h-6 w-6 text-[#1b38e8]" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <p className="font-mono font-semibold text-sm text-gray-900">
+                {app.application_number}
+              </p>
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium text-[#1b38e8] bg-[#eff3ff] border border-blue-200">
+                {APPLICATION_STATUS_LABELS[app.status]}
+              </span>
+              {app.funding_line ? (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium text-gray-700 bg-gray-100 border border-gray-200">
+                  {FUNDING_LINE_LABELS[app.funding_line]}
+                </span>
+              ) : null}
+            </div>
+            <h1 className="mt-1 text-2xl font-semibold text-gray-900">
+              {client.legal_name}
+            </h1>
+            <p className="mt-0.5 text-sm text-gray-500">
+              <span className="font-mono">CUIT {client.cuit}</span>
+              {" · "}
+              {CLIENT_TYPE_LABELS[client.client_type as ClientType]}
+            </p>
+          </div>
+
+          {/* Botón de asignación a la derecha */}
+          <div className="shrink-0">
+            <LegajoAssignmentButton
+              applicationId={app.id}
+              applicationNumber={app.application_number}
+              assignedOfficerId={app.assigned_officer_id}
+              assignedOfficerName={app.assigned_officer_name}
+              currentUserId={user.id}
+              currentUserRole={profile.role as UserRole as "officer" | "admin" | "analyst"}
+            />
+          </div>
+        </div>
+      </header>
+
+      {/* Grid principal: Documentos a la izquierda/centro, Acciones a la derecha */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        {/* Documentos (9 cols) */}
+        <div className="lg:col-span-8">
+          <LegajoDocumentosPanel
+            documents={documents}
+            additionalRequests={additionalRequests}
+          />
+        </div>
+
+        {/* Acciones (4 cols): Solicitud + Dictamen + Historial */}
+        <div className="lg:col-span-4 space-y-4">
+          {/* Solicitud */}
+          <section className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+            <div className="px-4 py-2.5 border-b border-gray-100">
+              <h2 className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                Solicitud
+              </h2>
+            </div>
+            <dl className="divide-y divide-gray-100">
+              <InfoRow
+                label="Monto solicitado"
+                value={
+                  app.requested_amount != null
+                    ? formatARS(Number(app.requested_amount))
+                    : null
+                }
+                mono
+              />
+              <InfoRow
+                label="Plazo solicitado"
+                value={
+                  app.requested_term_months
+                    ? `${app.requested_term_months} meses`
+                    : null
+                }
+              />
+              <InfoRow label="Destino del crédito" value={app.purpose} block />
+            </dl>
+          </section>
+
+          {/* Dictamen */}
+          {showDictamenForm ? (
+            <LegajoDictamenForm
+              applicationId={app.id}
+              existingDictamen={existingDictamen ?? null}
+              applicationStatus={app.status}
+            />
+          ) : (
+            <section className="rounded-xl border border-gray-200 bg-white p-5 text-center">
+              <p className="text-sm text-gray-500">
+                Este legajo no está en una fase de dictamen.
+              </p>
+            </section>
+          )}
+
+          {/* Historial */}
+          {history.length > 0 ? (
+            <section className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+              <div className="px-4 py-2.5 border-b border-gray-100 flex items-center gap-2">
+                <History className="h-3.5 w-3.5 text-gray-500" />
+                <h2 className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                  Historial ({history.length})
+                </h2>
+              </div>
+              <ul className="divide-y divide-gray-100">
+                {history.map((h) => (
+                  <li
+                    key={h.id}
+                    className="flex items-center justify-between px-4 py-2.5"
+                  >
+                    <div>
+                      <p className="font-mono text-xs font-semibold text-gray-900">
+                        {h.application_number}
+                      </p>
+                      <p className="text-[11px] text-gray-500">
+                        {new Date(h.created_at).toLocaleDateString("es-AR", {
+                          month: "short",
+                          year: "numeric",
+                        })}
+                      </p>
+                    </div>
+                    <span
+                      className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${getHistoryBadgeClass(
+                        h.status,
+                        h.decision
+                      )}`}
+                    >
+                      {APPLICATION_STATUS_LABELS[h.status]}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ============================================================
+// COMPONENTES INTERNOS
+// ============================================================
+
+function InfoRow({
+  label,
+  value,
+  mono,
+  block,
+}: {
+  label: string
+  value: string | null | undefined
+  mono?: boolean
+  block?: boolean
+}) {
+  if (block) {
+    return (
+      <div className="px-4 py-2.5">
+        <dt className="text-xs text-gray-500 mb-1">{label}</dt>
+        <dd
+          className={`text-sm ${mono ? "font-mono" : ""} ${
+            value ? "text-gray-900" : "text-gray-400 italic"
+          }`}
+        >
+          {value || "—"}
+        </dd>
+      </div>
+    )
+  }
+  return (
+    <div className="flex items-start justify-between gap-3 px-4 py-2.5">
+      <dt className="text-xs text-gray-500 shrink-0">{label}</dt>
+      <dd
+        className={`text-sm text-right ${mono ? "font-mono" : ""} ${
+          value ? "text-gray-900" : "text-gray-400 italic"
+        }`}
+      >
+        {value || "—"}
+      </dd>
+    </div>
+  )
+}
+
+// ============================================================
+// HELPERS
+// ============================================================
+
+function getHistoryBadgeClass(
+  status: ApplicationStatus,
+  decision: DictamenDecision | null
+): string {
+  if (decision === "approved" || status === "approved") {
+    return "text-emerald-700 bg-emerald-50 border-emerald-200"
+  }
+  if (
+    decision === "rejected" ||
+    status === "rejected_by_analyst" ||
+    status === "rejected_by_officer"
+  ) {
+    return "text-red-700 bg-red-50 border-red-200"
+  }
+  if (
+    status === "cancelled_by_client" ||
+    status === "cancelled_by_worcap"
+  ) {
+    return "text-gray-500 bg-gray-50 border-gray-200"
+  }
+  return "text-[#1b38e8] bg-[#eff3ff] border-blue-200"
+}
+
+function formatARS(amount: number): string {
+  return new Intl.NumberFormat("es-AR", {
+    style: "currency",
+    currency: "ARS",
+    maximumFractionDigits: 0,
+  }).format(amount)
+}
