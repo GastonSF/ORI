@@ -290,15 +290,6 @@ export default async function LegajoDetallePage({
               </ul>
             </section>
           ) : null}
-
-          {/* Placeholder si no hay historial ni dictamen */}
-          {!showDictamenForm && history.length === 0 ? (
-            <section className="rounded-xl border border-gray-200 border-dashed bg-white p-5 text-center">
-              <p className="text-xs text-gray-400">
-                Primera solicitud del cliente
-              </p>
-            </section>
-          ) : null}
         </div>
       </div>
     </div>
