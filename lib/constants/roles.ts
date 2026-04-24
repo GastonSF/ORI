@@ -68,7 +68,7 @@ export const CLIENT_STATUS_LABELS: Record<ClientStatus, string> = {
 }
 
 // ============================================================
-// FUNDING LINE (línea de fondeo - paso 4)
+// FUNDING LINE (línea de fondeo - se elige en el onboarding, paso 4)
 // ============================================================
 export const FUNDING_LINES = ["fgplus", "financing_general"] as const
 export type FundingLine = (typeof FUNDING_LINES)[number]
@@ -213,8 +213,8 @@ export const DOCUMENT_TYPE_LABELS: Record<DocumentType, string> = {
 
 /**
  * Documentos INICIALES requeridos según el tipo de cliente (paso 2).
- * Los documentos adicionales (paso 5) dependen de la línea de fondeo
- * elegida y se gestionan por additional_document_requests.
+ * Los documentos adicionales (paso 4 del timeline) dependen de la línea
+ * de fondeo elegida y se gestionan por additional_document_requests.
  */
 export const REQUIRED_DOCS_BY_CLIENT_TYPE: Record<ClientType, DocumentType[]> = {
   monotributo: [
@@ -272,8 +272,7 @@ export const REQUIRED_DOCS_BY_CLIENT_TYPE: Record<ClientType, DocumentType[]> = 
 
 /**
  * Presets de documentos que se piden automáticamente cuando el cliente
- * elige FGPlus (paso 4). Son los 4 docs core de FGPlus + condicionalmente
- * convenios_terceros si el analista lo agrega.
+ * eligió FGPlus en el onboarding. Son los 3 docs core de FGPlus.
  */
 export const FGPLUS_PRESET_DOCS: Array<{
   document_type: DocumentType
@@ -305,7 +304,7 @@ export const FGPLUS_PRESET_DOCS: Array<{
 ]
 
 /**
- * Presets del checklist del analista para Financiamiento General (paso 4).
+ * Presets del checklist del analista para Financiamiento General.
  * El analista elige cuáles tildar + agregar custom con "Otros".
  */
 export const FINANCING_GENERAL_CHECKLIST: Array<{
@@ -390,10 +389,13 @@ export const DICTAMEN_DECISION_LABELS: Record<DictamenDecision, string> = {
 // STATUS BUCKETS (UX) - agrupación para presentación visual
 // ============================================================
 //
-// Agrupa los 16 estados internos en 10 buckets de UX. Útil para:
-//  - Renderizar el timeline de 8 pasos (qué "paso" está activo)
+// Agrupa los estados internos en 10 buckets de UX. Útil para:
+//  - Renderizar el timeline de 7 pasos (qué "paso" está activo)
 //  - Hero dinámico del dashboard (qué mensaje mostrar)
 //  - Tono del mensaje (info / warning / success / error)
+//
+// NOTA: `awaiting_funding_line_choice` queda por compatibilidad pero
+// NO se usa en el flujo nuevo (la línea se elige en el onboarding).
 
 export const STATUS_BUCKETS = [
   "draft",
@@ -443,19 +445,21 @@ export function getStatusBucket(status: ApplicationStatus): StatusBucket {
 }
 
 /**
- * Timeline de 8 pasos del proceso del legajo.
+ * Timeline de 7 pasos del proceso del legajo (flujo nuevo).
+ * El paso "Elegí tu línea" desapareció porque el cliente lo elige
+ * en el onboarding antes de enviar.
+ *
  * Los labels en idioma del cliente viven en los componentes de UI.
  * Acá los shortLabel quedan técnicos para uso interno/fallback.
  */
 export const TIMELINE_STEPS = [
-  { bucket: "draft", label: "Completar tus datos", shortLabel: "Datos" },
-  { bucket: "pending_review", label: "Documentación inicial", shortLabel: "Docs iniciales" },
-  { bucket: "in_analysis", label: "Análisis inicial", shortLabel: "Análisis" },
-  { bucket: "awaiting_funding_line_choice", label: "Elegí tu línea", shortLabel: "Línea" },
-  { bucket: "additional_docs_pending", label: "Documentación adicional", shortLabel: "Docs extra" },
-  { bucket: "additional_docs_review", label: "Revisión económico-financiera", shortLabel: "Revisión" },
-  { bucket: "in_credit_analysis", label: "Análisis crediticio", shortLabel: "Crediticio" },
-  { bucket: "approved", label: "Resultado", shortLabel: "Resultado" },
+  { bucket: "draft", label: "Contanos sobre vos", shortLabel: "Datos" },
+  { bucket: "pending_review", label: "Recibimos tu solicitud", shortLabel: "Recibida" },
+  { bucket: "in_analysis", label: "Revisamos tus documentos", shortLabel: "Análisis" },
+  { bucket: "additional_docs_pending", label: "Sumá la documentación de tu línea", shortLabel: "Docs extra" },
+  { bucket: "additional_docs_review", label: "Revisamos lo que sumaste", shortLabel: "Revisión" },
+  { bucket: "in_credit_analysis", label: "Analizamos tu solicitud", shortLabel: "Crediticio" },
+  { bucket: "approved", label: "Tenés una respuesta", shortLabel: "Resultado" },
 ] as const satisfies ReadonlyArray<{
   bucket: StatusBucket
   label: string
@@ -464,7 +468,8 @@ export const TIMELINE_STEPS = [
 
 /**
  * Dado un bucket, devuelve el índice del paso correspondiente en TIMELINE_STEPS.
- * - docs_requested → el cliente vuelve al paso 2 (Documentación inicial)
+ * - docs_requested → el cliente vuelve al paso 2 (Recibimos tu solicitud)
+ * - awaiting_funding_line_choice → deprecado, mapea al paso 2 (no debería ocurrir)
  * - rejected/cancelled → índice del último paso (Resultado) con flag de "failed"
  */
 export function getTimelineIndex(bucket: StatusBucket): number {
@@ -473,33 +478,26 @@ export function getTimelineIndex(bucket: StatusBucket): number {
       return 0
     case "pending_review":
     case "docs_requested":
+    case "awaiting_funding_line_choice":
       return 1
     case "in_analysis":
       return 2
-    case "awaiting_funding_line_choice":
-      return 3
     case "additional_docs_pending":
-      return 4
+      return 3
     case "additional_docs_review":
-      return 5
+      return 4
     case "in_credit_analysis":
-      return 6
+      return 5
     case "approved":
     case "rejected":
     case "cancelled":
-      return 7
+      return 6
   }
 }
 
 // ============================================================
 // STAFF BUCKETS (UX) - agrupación para la bandeja del staff
 // ============================================================
-//
-// Agrupa los estados desde el punto de vista del staff:
-//  - unassigned: legajos sin assigned_officer_id
-//  - action_worcap: necesitan que WORCAP haga algo
-//  - waiting_client: esperando acción del cliente
-//  - closed: legajo terminado (aprobado, rechazado, cancelado)
 
 export const STAFF_BUCKETS = [
   "unassigned",
