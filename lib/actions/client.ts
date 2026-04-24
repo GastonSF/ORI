@@ -10,7 +10,7 @@ export type ActionResult<T = undefined> =
   | { ok: false; error: string; fieldErrors?: Record<string, string[]> }
 
 // ============================================================
-// SCHEMAS (inline - no dependemos de lib/validators/schemas.ts)
+// SCHEMAS
 // ============================================================
 
 const setClientTypeSchema = z.object({
@@ -227,10 +227,8 @@ export async function saveCompanyMembersAction(
 }
 
 // ============================================================
-// NUEVA: SOLICITUD DE FONDEO (monto + línea)
+// SOLICITUD DE FONDEO (monto + línea) - PASO 4
 // ============================================================
-// Se guarda en el legajo activo del cliente, no en la tabla clients.
-// Si todavía no existe legajo, se crea en status='draft'.
 
 export async function saveFundingRequestAction(
   input: FundingRequestInput
@@ -257,7 +255,6 @@ export async function saveFundingRequestAction(
     return { ok: false, error: "Cliente no encontrado. Completá los pasos anteriores." }
   }
 
-  // Buscar legajo activo (o crear uno en draft si no hay)
   const { data: activeApp } = await supabase
     .from("applications")
     .select("id, status")
@@ -269,9 +266,7 @@ export async function saveFundingRequestAction(
     )
     .maybeSingle()
 
-  let appId: string
   if (activeApp) {
-    appId = activeApp.id
     const { error: upErr } = await supabase
       .from("applications")
       .update({
@@ -282,7 +277,7 @@ export async function saveFundingRequestAction(
       .eq("id", activeApp.id)
     if (upErr) return { ok: false, error: upErr.message }
   } else {
-    const { data: newApp, error: insErr } = await supabase
+    const { error: insErr } = await supabase
       .from("applications")
       .insert({
         client_id: client.id,
@@ -291,15 +286,11 @@ export async function saveFundingRequestAction(
         requested_amount: parsed.data.requested_amount,
         funding_line: parsed.data.funding_line,
       })
-      .select("id")
-      .single()
-    if (insErr || !newApp) {
-      return { ok: false, error: insErr?.message ?? "No pudimos crear el legajo" }
+    if (insErr) {
+      return { ok: false, error: insErr.message }
     }
-    appId = newApp.id
   }
 
-  // Avanzar onboarding_step del cliente al paso 5 (Documentación)
   const { error: stepErr } = await supabase
     .from("clients")
     .update({ onboarding_step: Math.max(client.onboarding_step, 5) })
@@ -336,10 +327,19 @@ export async function markOnboardingStepAction(input: {
   return { ok: true }
 }
 
+// ============================================================
+// FINALIZAR Y ENVIAR SOLICITUD (un solo paso - botón del paso 6)
+// ============================================================
+// Hace 2 cosas en conjunto:
+//  1. Marca el onboarding del cliente como completo
+//  2. Cambia el status del legajo activo de "draft" a "submitted"
+// Si no hay legajo activo (ej: el cliente se saltea datos), devuelve error.
+
 export async function completeOnboardingAction(): Promise<ActionResult> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { ok: false, error: "No autenticado" }
+
   const { data: client } = await supabase
     .from("clients")
     .select("id")
@@ -347,13 +347,67 @@ export async function completeOnboardingAction(): Promise<ActionResult> {
     .single()
   if (!client) return { ok: false, error: "Cliente no encontrado" }
 
-  const { error } = await supabase
+  // Buscar el legajo activo en draft (el que se creó al guardar monto+línea)
+  const { data: draftApp } = await supabase
+    .from("applications")
+    .select("id, status, requested_amount, funding_line")
+    .eq("client_id", client.id)
+    .in("status", ["draft"])
+    .maybeSingle()
+
+  if (!draftApp) {
+    return {
+      ok: false,
+      error: "No encontramos un legajo en curso. Volvé a completar el paso 'Tu solicitud'.",
+    }
+  }
+
+  if (!draftApp.requested_amount || !draftApp.funding_line) {
+    return {
+      ok: false,
+      error: "Faltan el monto o la línea en tu solicitud. Completá el paso 'Tu solicitud'.",
+    }
+  }
+
+  // 1. Enviar el legajo (draft -> submitted)
+  const nowIso = new Date().toISOString()
+  const { error: appErr } = await supabase
+    .from("applications")
+    .update({
+      status: "submitted",
+      submitted_at: nowIso,
+      current_owner_role: "officer",
+      updated_at: nowIso,
+    })
+    .eq("id", draftApp.id)
+
+  if (appErr) {
+    return { ok: false, error: appErr.message }
+  }
+
+  // 2. Marcar onboarding como completo (solo si el anterior funcionó)
+  const { error: clientErr } = await supabase
     .from("clients")
     .update({ onboarding_completed: true, onboarding_step: 6 })
     .eq("id", client.id)
-  if (error) return { ok: false, error: error.message }
+
+  if (clientErr) {
+    // Intentar rollback del legajo si falla esto
+    await supabase
+      .from("applications")
+      .update({
+        status: "draft",
+        submitted_at: null,
+        current_owner_role: "client",
+      })
+      .eq("id", draftApp.id)
+    return { ok: false, error: clientErr.message }
+  }
+
   revalidatePath("/cliente")
   revalidatePath("/cliente/onboarding")
+  revalidatePath("/staff")
+  revalidatePath("/staff/dictamenes")
   return { ok: true }
 }
 
