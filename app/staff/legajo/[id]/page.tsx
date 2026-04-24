@@ -16,8 +16,23 @@ import {
 import { LegajoDocumentosPanel } from "@/components/staff/legajo-documentos-panel"
 import { LegajoDictamenForm } from "@/components/staff/legajo-dictamen-form"
 import { LegajoAssignmentButton } from "@/components/staff/legajo-assignment-button"
+import { LegajoAdvanceButton } from "@/components/staff/legajo-advance-button"
 
 type Params = { id: string }
+
+// Estados "de análisis inicial" donde tiene sentido mostrar el botón de avance
+const INITIAL_ANALYSIS_STATUSES: ApplicationStatus[] = [
+  "submitted",
+  "pending_authorization",
+  "authorized",
+  "docs_in_review",
+]
+
+// Cuántos docs se piden para cada línea (para el preview del modal)
+const DOCS_COUNT_BY_LINE: Record<FundingLine, number> = {
+  fgplus: 3,
+  financing_general: 3,
+}
 
 export default async function LegajoDetallePage({
   params,
@@ -179,9 +194,35 @@ export default async function LegajoDetallePage({
     profile.role === "admin" ||
     (profile.role === "officer" && app.assigned_officer_id === user.id)
 
+  // ============================================================
+  // ¿Mostrar el botón "Pedir docs de línea"?
+  // ============================================================
+  // Condiciones:
+  //  - Usuario puede actuar sobre este legajo (officer asignado o admin)
+  //  - Legajo está en análisis inicial
+  //  - Legajo tiene funding_line
+  //  - Hay al menos 1 doc inicial (sino no tiene sentido)
+  //  - TODOS los docs iniciales están aprobados
+  //  - No hay requests de docs adicionales ya creados (no repetir la acción)
+  const initialDocs = documents.filter((d) => d.doc_phase === "initial")
+  const allInitialDocsApproved =
+    initialDocs.length > 0 && initialDocs.every((d) => d.status === "approved")
+
+  const showAdvanceButton =
+    canActOnDocs &&
+    INITIAL_ANALYSIS_STATUSES.includes(app.status) &&
+    app.funding_line !== null &&
+    allInitialDocsApproved &&
+    additionalRequests.length === 0
+
+  const previewDocsCount = app.funding_line
+    ? DOCS_COUNT_BY_LINE[app.funding_line]
+    : 0
+
   // ¿Hay algo que mostrar en la columna derecha?
-  // Si no, los docs ocupan todo el ancho para alinearse con el header.
-  const hasRightColumn = showDictamenForm || history.length > 0
+  // Ahora también cuenta el botón de avance
+  const hasRightColumn =
+    showDictamenForm || history.length > 0 || showAdvanceButton
 
   return (
     <div className="space-y-5">
@@ -264,6 +305,16 @@ export default async function LegajoDetallePage({
 
         {hasRightColumn ? (
           <div className="lg:col-span-3 space-y-4">
+            {/* Botón de avance a docs de línea (arriba de todo, es la acción principal) */}
+            {showAdvanceButton && app.funding_line ? (
+              <LegajoAdvanceButton
+                applicationId={app.id}
+                applicationNumber={app.application_number}
+                fundingLine={app.funding_line}
+                previewDocsCount={previewDocsCount}
+              />
+            ) : null}
+
             {showDictamenForm ? (
               <LegajoDictamenForm
                 applicationId={app.id}
