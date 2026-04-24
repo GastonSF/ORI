@@ -31,8 +31,8 @@ type Props = {
     status: ApplicationStatus
     submitted_at: string | null
   } | null
-  docsPending: number // cuántos docs requeridos aún faltan subir
-  additionalDocsPending?: number // cuántos docs adicionales aún faltan subir (fase 5)
+  docsPending: number
+  additionalDocsPending?: number
 }
 
 type HeroVariant = {
@@ -44,11 +44,6 @@ type HeroVariant = {
   secondaryCta?: { label: string; href: string }
 }
 
-/**
- * Hero dinámico del dashboard: muestra el mensaje principal según en qué
- * etapa del proceso está el cliente. Sustituye al tradicional "¡Hola, X!"
- * por algo que realmente le diga qué está pasando y qué puede hacer.
- */
 export function DashboardHero({
   clientName,
   hasClient,
@@ -197,127 +192,121 @@ function pickVariant({
       icon: Building2,
       title: `¡Hola, ${clientName}! Empecemos tu alta en WORCAP`,
       description:
-        "Completá los datos de tu empresa en un proceso de 5 pasos. Podés guardar y continuar cuando quieras.",
+        "Completá los datos de tu empresa en un proceso de 6 pasos. Podés guardar y continuar cuando quieras.",
       cta: { label: "Iniciar onboarding", href: "/cliente/onboarding" },
     }
   }
 
   // CASO 2: Onboarding incompleto
   if (!onboardingCompleted) {
-    const pasosFaltantes = Math.max(0, 5 - onboardingStep)
+    const pasosFaltantes = Math.max(0, 6 - onboardingStep)
     return {
       tone: "action",
       icon: ListChecks,
       title: "Continuá tu onboarding donde lo dejaste",
       description:
         pasosFaltantes === 1
-          ? "Te falta 1 paso para completar los datos de tu empresa y poder enviar tu solicitud."
-          : `Te faltan ${pasosFaltantes} pasos para completar los datos de tu empresa y poder enviar tu solicitud.`,
+          ? "Te falta 1 paso para completar tu solicitud y enviarla a WORCAP."
+          : `Te faltan ${pasosFaltantes} pasos para completar tu solicitud y enviarla a WORCAP.`,
       cta: { label: "Continuar onboarding", href: "/cliente/onboarding" },
     }
   }
 
-  // CASO 3: Sin legajo activo (onboarding completo)
+  // CASO 3: Sin legajo activo (onboarding completo pero sin legajo)
+  // NOTA: en el flujo nuevo este caso casi no debería darse, porque el legajo
+  // se crea y se envía al finalizar el onboarding. Queda como fallback.
   if (!activeApp) {
     return {
       tone: "action",
       icon: FileText,
       title: "Todo listo para pedir tu crédito",
       description:
-        "Ya tenés el perfil de tu empresa completo. Podés iniciar una solicitud de crédito cuando quieras.",
+        "Ya tenés el perfil de tu empresa completo. Podés iniciar una nueva solicitud cuando quieras.",
       cta: { label: "Nueva solicitud", href: "/cliente/solicitud/nueva" },
     }
   }
 
-  // Desde acá, hay legajo activo: el mensaje depende del estado
+  // Desde acá hay legajo activo: el mensaje depende del estado
   const bucket = getStatusBucket(activeApp.status)
   const legajoStr = activeApp.application_number ?? "Legajo"
 
-  // CASO 4: Borrador — todavía no lo enviaste
+  // CASO 4: Borrador
+  // En el flujo nuevo esto no debería verse (al finalizar onboarding el legajo
+  // pasa directo a submitted), pero lo dejamos por si hay legajos viejos o
+  // algún caso de excepción.
   if (bucket === "draft") {
-    if (docsPending > 0) {
-      return {
-        tone: "warning",
-        icon: FileText,
-        title: `Completá tu ${legajoStr} para enviarlo`,
-        description:
-          docsPending === 1
-            ? "Te falta subir 1 documento para poder enviar tu solicitud a WORCAP."
-            : `Te faltan ${docsPending} documentos para poder enviar tu solicitud a WORCAP.`,
-        cta: { label: "Ir a documentación", href: "/cliente/documentos" },
-        secondaryCta: { label: "Ver detalle", href: "/cliente/solicitud" },
-      }
-    }
     return {
-      tone: "action",
+      tone: "info",
       icon: FileText,
-      title: `Tu ${legajoStr} está listo para enviar`,
+      title: `Tu ${legajoStr} está en borrador`,
       description:
-        "Tenés toda la documentación cargada. Enviá tu solicitud para que WORCAP empiece a analizarla.",
-      cta: { label: "Ver y enviar", href: "/cliente/documentos" },
+        "Para enviarlo a WORCAP, volvé al onboarding y completá el último paso.",
+      cta: { label: "Volver al onboarding", href: "/cliente/onboarding" },
     }
   }
 
-  // CASO 5: Pendiente de recepción
+  // CASO 5: Pendiente de recepción (recién enviada)
   if (bucket === "pending_review") {
     return {
       tone: "info",
       icon: Inbox,
-      title: `Tu ${legajoStr} está en camino a WORCAP`,
+      title: `Tu ${legajoStr} está en revisión`,
       description:
-        "Recibimos tu solicitud y en breve un oficial va a empezar a revisarla. Te vamos a avisar cuando haya novedades.",
+        "Recibimos tu solicitud y un oficial va a empezar a revisar tu documentación. Te avisamos si necesitamos algo más.",
       cta: { label: "Ver detalle", href: "/cliente/solicitud" },
     }
   }
 
-  // CASO 6: En análisis inicial (el oficial/analista está revisando docs iniciales)
+  // CASO 6: En análisis inicial
   if (bucket === "in_analysis") {
     return {
       tone: "info",
       icon: FileSearch,
       title: `Estamos analizando tu ${legajoStr}`,
       description:
-        "Un analista de WORCAP está revisando tu documentación inicial. Te avisaremos cuando termine para que elijas tu línea de fondeo.",
+        "Un analista de WORCAP está revisando tu documentación. Te avisaremos cuando necesitemos algo más o cuando esté listo el siguiente paso.",
       cta: { label: "Ver detalle", href: "/cliente/solicitud" },
     }
   }
 
-  // CASO 7: Docs requeridos — ACCIÓN URGENTE del cliente
+  // CASO 7: Docs requeridos adicionales (observed durante análisis inicial)
   if (bucket === "docs_requested") {
     return {
       tone: "warning",
       icon: AlertTriangle,
       title: "WORCAP te pidió documentación adicional",
       description:
-        "Un analista revisó tu solicitud y necesita info extra para continuar. Ingresá a los detalles para ver qué falta.",
+        "Revisamos tu solicitud y necesitamos info extra para continuar. Entrá al detalle para ver qué falta.",
       cta: { label: "Ver qué falta", href: "/cliente/solicitud" },
     }
   }
 
-  // CASO 8 (NUEVO): Análisis inicial OK — elegí tu línea de fondeo
+  // CASO 8: Análisis inicial OK — elegir línea
+  // DEPRECADO en el flujo nuevo (la línea se elige en el onboarding).
+  // Queda por compatibilidad; si se dispara es que hay un legajo viejo.
   if (bucket === "awaiting_funding_line_choice") {
     return {
       tone: "action",
       icon: GitBranch,
       title: "¡Elegí tu línea de fondeo!",
       description:
-        "Tu documentación inicial fue aprobada. Ahora elegí la línea que mejor se ajuste a tu empresa para continuar con el análisis.",
+        "Tu documentación inicial fue aprobada. Ahora elegí la línea que mejor se ajuste a tu empresa para continuar.",
       cta: { label: "Elegir línea", href: "/cliente/eleccion-linea" },
       secondaryCta: { label: "Ver detalle", href: "/cliente/solicitud" },
     }
   }
 
-  // CASO 9 (NUEVO): Subir documentación adicional
+  // CASO 9: Subir documentación específica de la línea
   if (bucket === "additional_docs_pending") {
     const count = additionalDocsPending
     const title = count > 0
-      ? `Subí tu documentación adicional`
+      ? `Sumá la documentación de tu línea`
       : `Completá tu documentación adicional`
     const description = count === 1
-      ? "Te falta 1 documento para que WORCAP pueda avanzar con el análisis económico-financiero."
+      ? "Te falta 1 documento específico de la línea que elegiste para que podamos continuar con el análisis."
       : count > 1
-      ? `Te faltan ${count} documentos para que WORCAP pueda avanzar con el análisis económico-financiero.`
-      : "WORCAP está esperando tu documentación específica de la línea elegida para continuar."
+      ? `Te faltan ${count} documentos específicos de la línea que elegiste para que podamos continuar con el análisis.`
+      : "WORCAP está esperando la documentación específica de tu línea para continuar."
     return {
       tone: "warning",
       icon: UploadCloud,
@@ -328,19 +317,19 @@ function pickVariant({
     }
   }
 
-  // CASO 10 (NUEVO): Revisión económico-financiera (analista revisando docs adicionales)
+  // CASO 10: Revisando docs adicionales
   if (bucket === "additional_docs_review") {
     return {
       tone: "info",
       icon: ScanLine,
-      title: `Estamos revisando tu documentación adicional`,
+      title: "Estamos revisando tu documentación adicional",
       description:
         "Un analista está revisando los documentos económico-financieros que enviaste. Si falta algo, te vamos a avisar desde acá.",
       cta: { label: "Ver detalle", href: "/cliente/solicitud" },
     }
   }
 
-  // CASO 11: En análisis crediticio (el análisis final con dictamen)
+  // CASO 11: Análisis crediticio final
   if (bucket === "in_credit_analysis") {
     return {
       tone: "info",
@@ -359,7 +348,7 @@ function pickVariant({
       icon: CheckCircle2,
       title: `¡Tu ${legajoStr} fue aprobado!`,
       description:
-        "Felicitaciones. Ingresá a los detalles para ver los términos finales y los próximos pasos.",
+        "Felicitaciones. Entrá al detalle para ver los términos finales y los próximos pasos.",
       cta: { label: "Ver resultado", href: "/cliente/solicitud" },
     }
   }
@@ -371,7 +360,7 @@ function pickVariant({
       icon: XCircle,
       title: `Tu ${legajoStr} fue rechazado`,
       description:
-        "Lamentablemente no pudimos aprobar esta solicitud. Ingresá a los detalles para ver los motivos.",
+        "Lamentablemente no pudimos aprobar esta solicitud. Entrá al detalle para ver los motivos.",
       cta: { label: "Ver motivo", href: "/cliente/solicitud" },
     }
   }
@@ -389,7 +378,7 @@ function pickVariant({
     }
   }
 
-  // Fallback (nunca debería llegar)
+  // Fallback
   return {
     tone: "info",
     icon: FileText,
