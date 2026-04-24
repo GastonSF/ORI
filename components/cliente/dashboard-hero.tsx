@@ -14,10 +14,12 @@ import {
   GitBranch,
   UploadCloud,
   ScanLine,
+  Mail,
 } from "lucide-react"
 import {
   getStatusBucket,
   type ApplicationStatus,
+  type FundingLine,
 } from "@/lib/constants/roles"
 
 type Props = {
@@ -29,6 +31,7 @@ type Props = {
     id: string
     application_number: string | null
     status: ApplicationStatus
+    funding_line: FundingLine | null
     submitted_at: string | null
   } | null
   docsPending: number
@@ -212,9 +215,7 @@ function pickVariant({
     }
   }
 
-  // CASO 3: Sin legajo activo (onboarding completo pero sin legajo)
-  // NOTA: en el flujo nuevo este caso casi no debería darse, porque el legajo
-  // se crea y se envía al finalizar el onboarding. Queda como fallback.
+  // CASO 3: Sin legajo activo
   if (!activeApp) {
     return {
       tone: "action",
@@ -229,11 +230,9 @@ function pickVariant({
   // Desde acá hay legajo activo: el mensaje depende del estado
   const bucket = getStatusBucket(activeApp.status)
   const legajoStr = activeApp.application_number ?? "Legajo"
+  const isFgplus = activeApp.funding_line === "fgplus"
 
   // CASO 4: Borrador
-  // En el flujo nuevo esto no debería verse (al finalizar onboarding el legajo
-  // pasa directo a submitted), pero lo dejamos por si hay legajos viejos o
-  // algún caso de excepción.
   if (bucket === "draft") {
     return {
       tone: "info",
@@ -282,8 +281,7 @@ function pickVariant({
   }
 
   // CASO 8: Análisis inicial OK — elegir línea
-  // DEPRECADO en el flujo nuevo (la línea se elige en el onboarding).
-  // Queda por compatibilidad; si se dispara es que hay un legajo viejo.
+  // DEPRECADO. Legacy.
   if (bucket === "awaiting_funding_line_choice") {
     return {
       tone: "action",
@@ -296,12 +294,28 @@ function pickVariant({
     }
   }
 
-  // CASO 9: Subir documentación específica de la línea
+  // CASO 9: PEDIDO DE INFORMACIÓN PENDIENTE
+  // Bifurca según línea:
+  //   - FGPlus: va a la nueva página índice con las 3 tarjetas
+  //   - FG: va al flujo viejo simple de documentos sueltos
   if (bucket === "additional_docs_pending") {
+    if (isFgplus) {
+      return {
+        tone: "warning",
+        icon: Mail,
+        title: "Tenés un pedido de información pendiente",
+        description:
+          "WORCAP te pide 3 cosas para avanzar con tu análisis: la composición de cartera, la política de originación y el detalle de tu política de cobranza.",
+        cta: {
+          label: "Ir al pedido de información",
+          href: "/cliente/pedido-informacion",
+        },
+        secondaryCta: { label: "Ver detalle", href: "/cliente/solicitud" },
+      }
+    }
+
+    // Financiamiento General: flujo simple
     const count = additionalDocsPending
-    const title = count > 0
-      ? `Sumá la documentación de tu línea`
-      : `Completá tu documentación adicional`
     const description = count === 1
       ? "Te falta 1 documento específico de la línea que elegiste para que podamos continuar con el análisis."
       : count > 1
@@ -310,15 +324,30 @@ function pickVariant({
     return {
       tone: "warning",
       icon: UploadCloud,
-      title,
+      title: "Sumá la documentación de tu línea",
       description,
       cta: { label: "Ir a documentación", href: "/cliente/documentos" },
       secondaryCta: { label: "Ver detalle", href: "/cliente/solicitud" },
     }
   }
 
-  // CASO 10: Revisando docs adicionales
+  // CASO 10: REVISANDO PEDIDO DE INFORMACIÓN
+  // Para FGPlus linkea a la nueva página (el cliente puede ver lo que envió en read-only).
   if (bucket === "additional_docs_review") {
+    if (isFgplus) {
+      return {
+        tone: "info",
+        icon: ScanLine,
+        title: "Estamos revisando tu pedido de información",
+        description:
+          "Un analista está revisando lo que enviaste: composición de cartera, política de originación y política de cobranza.",
+        cta: {
+          label: "Ver lo que enviaste",
+          href: "/cliente/pedido-informacion",
+        },
+      }
+    }
+
     return {
       tone: "info",
       icon: ScanLine,
