@@ -25,7 +25,6 @@ export const ROLE_DASHBOARDS: Record<UserRole, string> = {
 
 /**
  * Roles que tienen acceso a la vista interna /staff.
- * Cualquier staff puede ver y operar todos los pasos del legajo.
  */
 export const STAFF_ROLES: UserRole[] = ["officer", "analyst", "admin"]
 
@@ -34,7 +33,7 @@ export function isStaffRole(role: UserRole): boolean {
 }
 
 // ============================================================
-// CLIENT TYPE (tipo de empresa solicitante)
+// CLIENT TYPE
 // ============================================================
 export const CLIENT_TYPES = [
   "monotributo",
@@ -68,7 +67,7 @@ export const CLIENT_STATUS_LABELS: Record<ClientStatus, string> = {
 }
 
 // ============================================================
-// FUNDING LINE (línea de fondeo - se elige en el onboarding, paso 4)
+// FUNDING LINE
 // ============================================================
 export const FUNDING_LINES = ["fgplus", "financing_general"] as const
 export type FundingLine = (typeof FUNDING_LINES)[number]
@@ -80,13 +79,13 @@ export const FUNDING_LINE_LABELS: Record<FundingLine, string> = {
 
 export const FUNDING_LINE_DESCRIPTIONS: Record<FundingLine, string> = {
   fgplus:
-    "Para entidades financieras que prestan a sus socios o clientes. Pedimos composición de cartera, políticas de originación y cobranza.",
+    "Para entidades financieras que prestan a sus socios o clientes. Pedimos composición de cartera, política de originación y el detalle de tu política de cobranza.",
   financing_general:
     "Para PyMEs con necesidad de capital. Pedimos plan de negocios, flujo proyectado y avales personales según el caso.",
 }
 
 // ============================================================
-// APPLICATION STATUS (estados del legajo)
+// APPLICATION STATUS
 // ============================================================
 export const APPLICATION_STATUSES = [
   "draft",
@@ -115,8 +114,8 @@ export const APPLICATION_STATUS_LABELS: Record<ApplicationStatus, string> = {
   authorized: "En análisis inicial",
   docs_in_review: "En análisis inicial",
   awaiting_funding_line_choice: "Elegí tu línea",
-  additional_docs_pending: "Documentación adicional",
-  additional_docs_review: "Revisión económico-financiera",
+  additional_docs_pending: "Pedido de información",
+  additional_docs_review: "Revisando pedido de información",
   docs_requested: "Solicitud de documentación adicional",
   in_risk_analysis: "En análisis crediticio",
   observed: "En análisis crediticio",
@@ -127,9 +126,6 @@ export const APPLICATION_STATUS_LABELS: Record<ApplicationStatus, string> = {
   cancelled_by_worcap: "Cancelada por WORCAP",
 }
 
-/**
- * Estados considerados "finales" - el legajo ya no se puede modificar.
- */
 export const FINAL_STATUSES: ApplicationStatus[] = [
   "approved",
   "rejected_by_officer",
@@ -138,10 +134,6 @@ export const FINAL_STATUSES: ApplicationStatus[] = [
   "cancelled_by_worcap",
 ]
 
-/**
- * Estados en los que el cliente puede cancelar directamente su legajo.
- * Después de `in_risk_analysis`, debe pedírselo al oficial.
- */
 export const CLIENT_CANCELLABLE_STATUSES: ApplicationStatus[] = [
   "draft",
   "submitted",
@@ -182,6 +174,11 @@ export const DOCUMENT_TYPES = [
   "politica_originacion",
   "politica_cobranza",
   "convenio_terceros",
+  "autorizacion_descuento",
+  "cartera_detalle_clientes",
+  "cartera_caida_cuotas",
+  "cartera_formas_pago",
+  "cartera_otro",
   // Documentación adicional Financiamiento General
   "aval_personal",
   "plan_negocios",
@@ -201,10 +198,15 @@ export const DOCUMENT_TYPE_LABELS: Record<DocumentType, string> = {
   estatuto_social: "Estatuto social",
   actas: "Actas",
   balance: "Balance",
-  composicion_cartera: "Composición de cartera (Excel)",
+  composicion_cartera: "Composición de cartera",
   politica_originacion: "Política de originación",
   politica_cobranza: "Política de cobranza",
   convenio_terceros: "Convenio con terceros",
+  autorizacion_descuento: "Autorización de descuento",
+  cartera_detalle_clientes: "Detalle del cliente",
+  cartera_caida_cuotas: "Caída de cuotas",
+  cartera_formas_pago: "Formas de pago",
+  cartera_otro: "Otra información de cartera",
   aval_personal: "Aval personal",
   plan_negocios: "Plan de negocios",
   flujo_ventas_proyectado: "Flujo de ventas proyectado",
@@ -212,9 +214,7 @@ export const DOCUMENT_TYPE_LABELS: Record<DocumentType, string> = {
 }
 
 /**
- * Documentos INICIALES requeridos según el tipo de cliente (paso 2).
- * Los documentos adicionales dependen de la línea de fondeo elegida
- * y se gestionan por additional_document_requests.
+ * Documentos INICIALES requeridos según el tipo de cliente.
  */
 export const REQUIRED_DOCS_BY_CLIENT_TYPE: Record<ClientType, DocumentType[]> = {
   monotributo: [
@@ -270,10 +270,135 @@ export const REQUIRED_DOCS_BY_CLIENT_TYPE: Record<ClientType, DocumentType[]> = 
   ],
 }
 
-/**
- * Presets de documentos que se piden automáticamente cuando el cliente
- * eligió FGPlus en el onboarding. Son los 3 docs core de FGPlus.
- */
+// ============================================================
+// FGPLUS - SLOTS DE COMPOSICIÓN DE CARTERA
+// ============================================================
+// Cuando el cliente elige FGPlus, le pedimos varios archivos Excel
+// porque cada cliente tiene su composición de cartera en formatos
+// distintos. 3 slots sugeridos + 2 extra + "agregar más".
+
+export type CarteraSlot = {
+  label: string
+  description: string
+  suggested: boolean
+}
+
+export const FGPLUS_CARTERA_SLOTS: CarteraSlot[] = [
+  {
+    label: "Detalle del cliente",
+    description:
+      "Información por deudor: nombre, DNI, monto, cuotas, fecha de alta.",
+    suggested: true,
+  },
+  {
+    label: "Caída de cuotas",
+    description:
+      "Cronograma de vencimientos: qué cuotas caen cada mes, cuánto capital y cuánto interés.",
+    suggested: true,
+  },
+  {
+    label: "Formas de pago",
+    description:
+      "Detalle de cómo cobra cada crédito: código de descuento, convenio, canal.",
+    suggested: true,
+  },
+  {
+    label: "",
+    description: "Subí otro archivo Excel si tu cartera tiene información adicional.",
+    suggested: false,
+  },
+  {
+    label: "",
+    description: "Subí otro archivo Excel si tu cartera tiene información adicional.",
+    suggested: false,
+  },
+]
+
+// ============================================================
+// FGPLUS - CANALES DE COBRANZA (árbol)
+// ============================================================
+
+export const COLLECTION_CHANNELS = [
+  "descuento_haberes",
+  "debito_cuenta",
+  "pago_voluntario",
+] as const
+export type CollectionChannel = (typeof COLLECTION_CHANNELS)[number]
+
+export const COLLECTION_CHANNEL_LABELS: Record<CollectionChannel, string> = {
+  descuento_haberes: "Descuento de haberes",
+  debito_cuenta: "Débito en cuenta",
+  pago_voluntario: "Pago voluntario",
+}
+
+export const COLLECTION_CHANNEL_DESCRIPTIONS: Record<CollectionChannel, string> = {
+  descuento_haberes:
+    "La cuota se descuenta directamente del sueldo del deudor. Es el canal con menor mora.",
+  debito_cuenta:
+    "La cuota se debita de la cuenta bancaria del deudor.",
+  pago_voluntario:
+    "El deudor paga activamente cada mes. Es el canal con mayor exigencia para el cliente.",
+}
+
+// Sub-opción: si hay débito en cuenta, qué tipo de cuenta
+export const DEBITO_TIPOS = ["cuenta_corriente", "caja_ahorro"] as const
+export type DebitoTipo = (typeof DEBITO_TIPOS)[number]
+
+export const DEBITO_TIPO_LABELS: Record<DebitoTipo, string> = {
+  cuenta_corriente: "Cuenta corriente",
+  caja_ahorro: "Caja de ahorro",
+}
+
+// ============================================================
+// FGPLUS - TITULARIDAD DEL CÓDIGO DE DESCUENTO
+// ============================================================
+
+export const COLLECTION_CODE_OWNERSHIPS = [
+  "propio",
+  "tercero_directo",
+  "tercero_sub_cedido",
+] as const
+export type CollectionCodeOwnership = (typeof COLLECTION_CODE_OWNERSHIPS)[number]
+
+export const COLLECTION_CODE_OWNERSHIP_LABELS: Record
+  CollectionCodeOwnership,
+  string
+> = {
+  propio: "Propio",
+  tercero_directo: "De otra entidad que me lo cede",
+  tercero_sub_cedido: "De una cadena de cesión (A → B → yo)",
+}
+
+export const COLLECTION_CODE_OWNERSHIP_DESCRIPTIONS: Record
+  CollectionCodeOwnership,
+  string
+> = {
+  propio:
+    "El código te pertenece directamente. Solo necesitás la autorización del ente que descuenta.",
+  tercero_directo:
+    "Otra entidad (ej: otra mutual) te presta su código. Necesitás un convenio con esa entidad + la autorización del ente que descuenta.",
+  tercero_sub_cedido:
+    "Una entidad tiene el código original, se lo cedió a otra, y esta segunda te lo presta a vos. Necesitás 2 convenios + 2 autorizaciones.",
+}
+
+// ============================================================
+// FGPLUS - PRESETS DEL PEDIDO DE INFORMACIÓN
+// ============================================================
+// Cuando el oficial avanza un legajo FGPlus a "Pedido de información",
+// estas son las cosas que el cliente tiene que completar:
+//
+//   1. Composición de cartera (5 slots de Excel + agregar más)
+//      → NO son additional_document_requests, son uploads libres
+//
+//   2. Política de originación (1 archivo suelto)
+//      → Sí es un additional_document_request
+//
+//   3. Política de cobranza (árbol completo)
+//      → Guardado en funding_line_responses + collection_codes
+//      → NO es un document, es un sub-flujo propio
+//
+// Así que el único preset_doc que creamos automáticamente es el #2.
+
 export const FGPLUS_PRESET_DOCS: Array<{
   document_type: DocumentType
   document_name: string
@@ -281,32 +406,20 @@ export const FGPLUS_PRESET_DOCS: Array<{
   is_required: boolean
 }> = [
   {
-    document_type: "composicion_cartera",
-    document_name: "Composición de cartera (Excel)",
-    description:
-      "Archivo Excel con 3 bloques: detalle del cliente, cronograma/caída de cuotas, y forma de pago/cobranza.",
-    is_required: true,
-  },
-  {
     document_type: "politica_originacion",
     document_name: "Política de originación",
     description:
-      "PDF o Word que describa cómo prestan: criterios, montos, plazos, edad del cliente, excepciones autorizadas.",
-    is_required: true,
-  },
-  {
-    document_type: "politica_cobranza",
-    document_name: "Política de cobranza",
-    description:
-      "PDF o Word que describa cómo cobran: canales (descuento de haberes, débito, pago voluntario), códigos, convenios.",
+      "Un documento (PDF o Word) que describa cómo prestás: criterios, montos máximos, plazos, edades, excepciones autorizadas por el directorio.",
     is_required: true,
   },
 ]
 
-/**
- * Presets del checklist del analista para Financiamiento General.
- * El analista elige cuáles tildar + agregar custom con "Otros".
- */
+// ============================================================
+// FINANCING GENERAL - PRESETS DEL PEDIDO DE INFORMACIÓN
+// ============================================================
+// FG sigue con su flujo simple: 3 docs sueltos como additional_document_requests.
+// NO tiene árbol ni composición de cartera.
+
 export const FINANCING_GENERAL_CHECKLIST: Array<{
   document_type: DocumentType
   document_name: string
@@ -343,14 +456,14 @@ export const DOCUMENT_STATUS_LABELS: Record<DocumentStatus, string> = {
 }
 
 // ============================================================
-// DOCUMENT PHASE (fase a la que pertenece un documento)
+// DOCUMENT PHASE
 // ============================================================
 export const DOCUMENT_PHASES = ["initial", "additional"] as const
 export type DocumentPhase = (typeof DOCUMENT_PHASES)[number]
 
 export const DOCUMENT_PHASE_LABELS: Record<DocumentPhase, string> = {
   initial: "Documentación inicial",
-  additional: "Documentación adicional",
+  additional: "Pedido de información",
 }
 
 // ============================================================
@@ -386,16 +499,8 @@ export const DICTAMEN_DECISION_LABELS: Record<DictamenDecision, string> = {
 }
 
 // ============================================================
-// STATUS BUCKETS (UX) - agrupación para presentación visual
+// STATUS BUCKETS (UX)
 // ============================================================
-//
-// Agrupa los estados internos en 10 buckets de UX. Útil para:
-//  - Renderizar el timeline de 7 pasos (qué "paso" está activo)
-//  - Hero dinámico del dashboard (qué mensaje mostrar)
-//  - Tono del mensaje (info / warning / success / error)
-//
-// NOTA: `awaiting_funding_line_choice` queda por compatibilidad pero
-// NO se usa en el flujo nuevo (la línea se elige en el onboarding).
 
 export const STATUS_BUCKETS = [
   "draft",
@@ -446,22 +551,13 @@ export function getStatusBucket(status: ApplicationStatus): StatusBucket {
 
 /**
  * Timeline de 7 pasos del proceso del legajo (flujo nuevo).
- * El paso "Elegí tu línea" desapareció porque el cliente lo elige
- * en el onboarding antes de enviar.
- *
- * El paso 2 "Documentación inicial" representa la ENTREGA de docs iniciales
- * (se marca como completado apenas el cliente envía la solicitud).
- * El paso 3 "Análisis" es donde vive el legajo mientras el oficial revisa.
- *
- * Los labels en idioma del cliente viven en los componentes de UI.
- * Acá los shortLabel quedan técnicos para uso interno/fallback.
  */
 export const TIMELINE_STEPS = [
   { bucket: "draft", label: "Contanos sobre vos", shortLabel: "Datos" },
   { bucket: "pending_review", label: "Documentación inicial", shortLabel: "Doc inicial" },
   { bucket: "in_analysis", label: "Analizamos tus documentos", shortLabel: "Análisis" },
-  { bucket: "additional_docs_pending", label: "Sumá la documentación de tu línea", shortLabel: "Docs extra" },
-  { bucket: "additional_docs_review", label: "Revisamos lo que sumaste", shortLabel: "Revisión" },
+  { bucket: "additional_docs_pending", label: "Pedido de información", shortLabel: "Pedido info" },
+  { bucket: "additional_docs_review", label: "Revisamos tu pedido de información", shortLabel: "Revisión" },
   { bucket: "in_credit_analysis", label: "Analizamos tu solicitud", shortLabel: "Crediticio" },
   { bucket: "approved", label: "Tenés una respuesta", shortLabel: "Resultado" },
 ] as const satisfies ReadonlyArray<{
@@ -470,17 +566,6 @@ export const TIMELINE_STEPS = [
   shortLabel: string
 }>
 
-/**
- * Dado un bucket, devuelve el índice del paso correspondiente en TIMELINE_STEPS.
- *
- * Clave del mapeo: apenas el cliente envía (submitted → pending_review),
- * el dot salta directo al paso 3 (Análisis). El paso 2 (Doc inicial) queda
- * como completado porque la entrega ya ocurrió.
- *
- * - docs_requested → vuelve al paso 3 (sigue en análisis con observaciones)
- * - awaiting_funding_line_choice → deprecado, mapea al paso 3 (no debería ocurrir)
- * - rejected/cancelled → índice del último paso (Resultado)
- */
 export function getTimelineIndex(bucket: StatusBucket): number {
   switch (bucket) {
     case "draft":
@@ -504,7 +589,7 @@ export function getTimelineIndex(bucket: StatusBucket): number {
 }
 
 // ============================================================
-// STAFF BUCKETS (UX) - agrupación para la bandeja del staff
+// STAFF BUCKETS
 // ============================================================
 
 export const STAFF_BUCKETS = [
@@ -529,10 +614,6 @@ export const STAFF_BUCKET_DESCRIPTIONS: Record<StaffBucket, string> = {
   closed: "Legajos finalizados (aprobados, rechazados o cancelados)",
 }
 
-/**
- * Dado el estado y la asignación de un legajo, devuelve el bucket
- * de UX desde el punto de vista del staff.
- */
 export function getStaffBucket(
   status: ApplicationStatus,
   hasAssignedOfficer: boolean
@@ -561,9 +642,6 @@ export function getStaffBucket(
   return "waiting_client"
 }
 
-/**
- * Color visual para cada bucket de staff. Para badges y filtros.
- */
 export type StaffBucketColor = {
   bg: string
   text: string
