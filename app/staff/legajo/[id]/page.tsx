@@ -79,10 +79,25 @@ export default async function LegajoDetallePage({
     assigned_officer_name: assignedOfficer?.full_name ?? null,
   }
 
+  // Docs con join al revisor (para mostrar "Aprobado por Carlos Oficial")
   const { data: rawDocs } = await supabase
     .from("documents")
     .select(
-      "id, file_name, file_size_bytes, document_type, doc_phase, status, uploaded_at, created_at, uploaded_on_behalf_by_staff"
+      `
+        id,
+        file_name,
+        file_size_bytes,
+        document_type,
+        doc_phase,
+        status,
+        uploaded_at,
+        created_at,
+        uploaded_on_behalf_by_staff,
+        review_notes,
+        reviewed_at,
+        reviewed_by,
+        reviewer:profiles!documents_reviewed_by_fkey(full_name)
+      `
     )
     .eq("application_id", id)
     .order("created_at", { ascending: true })
@@ -94,16 +109,22 @@ export default async function LegajoDetallePage({
     )
     .eq("application_id", id)
 
-  const documents = (rawDocs ?? []).map((d) => ({
-    id: d.id,
-    file_name: d.file_name,
-    file_size_bytes: d.file_size_bytes,
-    document_type: d.document_type as string,
-    doc_phase: d.doc_phase as "initial" | "additional",
-    status: d.status as "pending" | "uploaded" | "approved" | "rejected",
-    uploaded_at: d.uploaded_at,
-    uploaded_on_behalf_by_staff: !!d.uploaded_on_behalf_by_staff,
-  }))
+  const documents = (rawDocs ?? []).map((d) => {
+    const reviewer = Array.isArray(d.reviewer) ? d.reviewer[0] : d.reviewer
+    return {
+      id: d.id,
+      file_name: d.file_name,
+      file_size_bytes: d.file_size_bytes,
+      document_type: d.document_type as string,
+      doc_phase: d.doc_phase as "initial" | "additional",
+      status: d.status as "pending" | "uploaded" | "approved" | "rejected",
+      uploaded_at: d.uploaded_at,
+      uploaded_on_behalf_by_staff: !!d.uploaded_on_behalf_by_staff,
+      review_notes: d.review_notes as string | null,
+      reviewed_at: d.reviewed_at as string | null,
+      reviewed_by_name: (reviewer?.full_name ?? null) as string | null,
+    }
+  })
 
   const additionalRequests = (rawAddlReqs ?? []).map((r) => ({
     id: r.id,
@@ -156,7 +177,11 @@ export default async function LegajoDetallePage({
   const showDictamenForm =
     isAnalystOrAdmin && (isDictaminable || !!existingDictamen)
 
-  const canUploadAsStaff =
+  // Permisos de acción sobre docs:
+  //   - admin: siempre
+  //   - officer: solo si está asignado al legajo
+  //   - analyst: nunca (solo revisa al dictaminar)
+  const canActOnDocs =
     profile.role === "admin" ||
     (profile.role === "officer" && app.assigned_officer_id === user.id)
 
@@ -236,7 +261,8 @@ export default async function LegajoDetallePage({
             applicationNumber={app.application_number}
             clientType={client.client_type as ClientType}
             clientId={client.id}
-            canUploadAsStaff={canUploadAsStaff}
+            canUploadAsStaff={canActOnDocs}
+            canReviewDocs={canActOnDocs}
           />
         </div>
 
