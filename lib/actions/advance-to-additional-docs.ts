@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache"
 import { headers } from "next/headers"
 import {
   FGPLUS_PRESET_DOCS,
+  FGPLUS_CARTERA_SLOTS,
   FINANCING_GENERAL_CHECKLIST,
   type FundingLine,
 } from "@/lib/constants/roles"
@@ -16,18 +17,25 @@ export type ActionResult<T = undefined> =
 type AdvanceResult = ActionResult<{ requests_created: number }>
 
 /**
- * Avanza un legajo desde "análisis inicial" a "docs específicos de la línea".
+ * Avanza un legajo desde "análisis inicial" a "Pedido de información".
  *
  * Lo llama el oficial cuando terminó de aprobar los docs iniciales.
- * Hace 3 cosas:
- *   1. Cambia el status del legajo a 'additional_docs_pending'
- *   2. Deja el legajo en manos del cliente (current_owner_role = 'client')
- *   3. Crea los additional_document_requests según la línea elegida
+ *
+ * Para FGPlus crea:
+ *   - N requests para los slots de composición de cartera (Excel sueltos)
+ *   - 1 request para "Política de originación"
+ *   - 1 fila vacía en funding_line_responses (para el árbol de cobranza)
+ *
+ * Para Financiamiento General crea:
+ *   - 3 requests con los docs del checklist (aval, plan, flujo)
+ *
+ * Y en ambos casos:
+ *   - Cambia el status del legajo a 'additional_docs_pending'
+ *   - Deja el legajo en manos del cliente (current_owner_role = 'client')
  *
  * Reglas:
  *   - Solo oficial asignado o admin pueden ejecutarla
- *   - El legajo debe estar en análisis inicial (authorized / docs_in_review /
- *     submitted / pending_authorization)
+ *   - El legajo debe estar en análisis inicial
  *   - El legajo debe tener funding_line (no puede ser null)
  *   - Todos los docs iniciales requeridos deben estar aprobados
  */
@@ -103,6 +111,8 @@ export async function advanceToAdditionalDocsAction(input: {
     }
   }
 
+  const fundingLine = app.funding_line as FundingLine
+
   // Validar que todos los docs iniciales estén aprobados
   const { data: initialDocs } = await supabase
     .from("documents")
@@ -135,25 +145,21 @@ export async function advanceToAdditionalDocsAction(input: {
   if (existingRequestsCount && existingRequestsCount > 0) {
     return {
       ok: false,
-      error: "Este legajo ya tiene documentación adicional asignada.",
+      error: "Este legajo ya tiene un pedido de información asignado.",
     }
   }
 
-  // Crear los requests según la línea
-  const presetDocs = getPresetDocsForLine(app.funding_line as FundingLine)
   const nowIso = new Date().toISOString()
 
-  const requestsToCreate = presetDocs.map((doc) => ({
-    application_id: app.id,
-    funding_line: app.funding_line as FundingLine,
-    document_name: doc.document_name,
-    description: doc.description,
-    is_required: doc.is_required,
-    is_preset: true,
-    status: "pending" as const,
-    requested_by: user.id,
-    requested_at: nowIso,
-  }))
+  // ============================================================
+  // Crear los requests según la línea
+  // ============================================================
+  const requestsToCreate = buildRequestsForLine(
+    app.id,
+    fundingLine,
+    user.id,
+    nowIso
+  )
 
   const { error: reqErr } = await supabase
     .from("additional_document_requests")
@@ -166,7 +172,38 @@ export async function advanceToAdditionalDocsAction(input: {
     }
   }
 
+  // ============================================================
+  // Solo FGPlus: crear fila vacía en funding_line_responses
+  // para el árbol de política de cobranza
+  // ============================================================
+  if (fundingLine === "fgplus") {
+    const { error: flrErr } = await supabase
+      .from("funding_line_responses")
+      .insert({
+        application_id: app.id,
+        channels: [],
+        debito_tipos: [],
+        completed_at: null,
+      })
+
+    if (flrErr) {
+      // Rollback los requests creados
+      await supabase
+        .from("additional_document_requests")
+        .delete()
+        .eq("application_id", app.id)
+        .eq("requested_by", user.id)
+        .gte("requested_at", nowIso)
+      return {
+        ok: false,
+        error: `Error creando el árbol de política de cobranza: ${flrErr.message}`,
+      }
+    }
+  }
+
+  // ============================================================
   // Cambiar el status del legajo
+  // ============================================================
   const { error: updateErr } = await supabase
     .from("applications")
     .update({
@@ -177,13 +214,21 @@ export async function advanceToAdditionalDocsAction(input: {
     .eq("id", app.id)
 
   if (updateErr) {
-    // Rollback: borrar los requests creados si falla el update del status
+    // Rollback: borrar lo que ya creamos
     await supabase
       .from("additional_document_requests")
       .delete()
       .eq("application_id", app.id)
       .eq("requested_by", user.id)
       .gte("requested_at", nowIso)
+
+    if (fundingLine === "fgplus") {
+      await supabase
+        .from("funding_line_responses")
+        .delete()
+        .eq("application_id", app.id)
+    }
+
     return {
       ok: false,
       error: `Error avanzando el legajo: ${updateErr.message}`,
@@ -205,8 +250,9 @@ export async function advanceToAdditionalDocsAction(input: {
     },
     new_value: {
       new_status: "additional_docs_pending",
-      funding_line: app.funding_line,
+      funding_line: fundingLine,
       requests_created: requestsToCreate.length,
+      has_collection_tree: fundingLine === "fgplus",
       advanced_by_name: profile.full_name,
     },
     ip_address: ipAddress,
@@ -220,6 +266,7 @@ export async function advanceToAdditionalDocsAction(input: {
   revalidatePath("/cliente")
   revalidatePath("/cliente/solicitud")
   revalidatePath("/cliente/documentos")
+  revalidatePath("/cliente/pedido-informacion")
 
   return {
     ok: true,
@@ -231,27 +278,92 @@ export async function advanceToAdditionalDocsAction(input: {
 // HELPERS
 // ============================================================
 
-type PresetDoc = {
+type RequestRow = {
+  application_id: string
+  funding_line: FundingLine
   document_name: string
-  description: string
+  description: string | null
   is_required: boolean
+  is_preset: boolean
+  status: "pending"
+  requested_by: string
+  requested_at: string
 }
 
-function getPresetDocsForLine(line: FundingLine): PresetDoc[] {
+/**
+ * Arma la lista de requests a insertar según la línea.
+ *
+ * FGPlus:
+ *   - 5 slots de cartera (3 sugeridos + 2 vacíos extra). Los 3 sugeridos
+ *     se crean con su label; los 2 extra se crean con nombre genérico
+ *     para que el cliente los edite o los deje sin usar.
+ *   - 1 doc suelto (Política de originación)
+ *
+ * Financiamiento General:
+ *   - 3 docs del checklist
+ */
+function buildRequestsForLine(
+  applicationId: string,
+  line: FundingLine,
+  requestedBy: string,
+  requestedAt: string
+): RequestRow[] {
+  const rows: RequestRow[] = []
+
   if (line === "fgplus") {
-    return FGPLUS_PRESET_DOCS.map((d) => ({
-      document_name: d.document_name,
-      description: d.description,
-      is_required: d.is_required,
-    }))
+    // Slots de cartera
+    FGPLUS_CARTERA_SLOTS.forEach((slot, idx) => {
+      const isSuggestedSlot = slot.suggested
+      const name = isSuggestedSlot
+        ? `Cartera — ${slot.label}`
+        : `Cartera — Archivo extra ${idx - 2}`
+      rows.push({
+        application_id: applicationId,
+        funding_line: line,
+        document_name: name,
+        description: slot.description,
+        is_required: isSuggestedSlot,
+        is_preset: true,
+        status: "pending",
+        requested_by: requestedBy,
+        requested_at: requestedAt,
+      })
+    })
+
+    // Política de originación (único doc suelto de FGPlus)
+    FGPLUS_PRESET_DOCS.forEach((doc) => {
+      rows.push({
+        application_id: applicationId,
+        funding_line: line,
+        document_name: doc.document_name,
+        description: doc.description,
+        is_required: doc.is_required,
+        is_preset: true,
+        status: "pending",
+        requested_by: requestedBy,
+        requested_at: requestedAt,
+      })
+    })
+
+    return rows
   }
-  // financing_general: todos los del checklist son recomendados pero no required por default
-  // (el analista después puede agregar más con "Otros")
-  return FINANCING_GENERAL_CHECKLIST.map((d) => ({
-    document_name: d.document_name,
-    description: d.description,
-    is_required: true,
-  }))
+
+  // Financiamiento General
+  FINANCING_GENERAL_CHECKLIST.forEach((doc) => {
+    rows.push({
+      application_id: applicationId,
+      funding_line: line,
+      document_name: doc.document_name,
+      description: doc.description,
+      is_required: true,
+      is_preset: true,
+      status: "pending",
+      requested_by: requestedBy,
+      requested_at: requestedAt,
+    })
+  })
+
+  return rows
 }
 
 async function getClientIp(): Promise<string | null> {
