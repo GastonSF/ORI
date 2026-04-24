@@ -156,10 +156,6 @@ export default async function LegajoDetallePage({
   const showDictamenForm =
     isAnalystOrAdmin && (isDictaminable || !!existingDictamen)
 
-  // ¿Puede este staff subir docs en nombre del cliente?
-  //   - admin: siempre
-  //   - officer: solo si está asignado a este legajo
-  //   - analyst: nunca (solo revisa y dictamina)
   const canUploadAsStaff =
     profile.role === "admin" ||
     (profile.role === "officer" && app.assigned_officer_id === user.id)
@@ -200,11 +196,19 @@ export default async function LegajoDetallePage({
             <h1 className="mt-1 text-2xl font-semibold text-gray-900">
               {client.legal_name}
             </h1>
-            <p className="mt-0.5 text-sm text-gray-500">
+            <div className="mt-0.5 flex items-center gap-2 flex-wrap text-sm text-gray-500">
               <span className="font-mono">CUIT {client.cuit}</span>
-              {" · "}
-              {CLIENT_TYPE_LABELS[client.client_type as ClientType]}
-            </p>
+              <span className="text-gray-300">·</span>
+              <span>{CLIENT_TYPE_LABELS[client.client_type as ClientType]}</span>
+              {app.requested_amount != null ? (
+                <>
+                  <span className="text-gray-300">·</span>
+                  <span className="font-mono font-medium text-gray-700">
+                    {formatARS(Number(app.requested_amount))} solicitados
+                  </span>
+                </>
+              ) : null}
+            </div>
           </div>
 
           {/* Botón de asignación a la derecha */}
@@ -221,10 +225,10 @@ export default async function LegajoDetallePage({
         </div>
       </header>
 
-      {/* Grid principal: Documentos a la izquierda/centro, Acciones a la derecha */}
+      {/* Grid principal: Documentos anchos + columna derecha angosta */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        {/* Documentos (8 cols) */}
-        <div className="lg:col-span-8">
+        {/* Documentos (9 cols - más anchos ahora) */}
+        <div className="lg:col-span-9">
           <LegajoDocumentosPanel
             documents={documents}
             additionalRequests={additionalRequests}
@@ -236,51 +240,16 @@ export default async function LegajoDetallePage({
           />
         </div>
 
-        {/* Acciones (4 cols): Solicitud + Dictamen + Historial */}
-        <div className="lg:col-span-4 space-y-4">
-          {/* Solicitud */}
-          <section className="rounded-xl border border-gray-200 bg-white overflow-hidden">
-            <div className="px-4 py-2.5 border-b border-gray-100">
-              <h2 className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-                Solicitud
-              </h2>
-            </div>
-            <dl className="divide-y divide-gray-100">
-              <InfoRow
-                label="Monto solicitado"
-                value={
-                  app.requested_amount != null
-                    ? formatARS(Number(app.requested_amount))
-                    : null
-                }
-                mono
-              />
-              <InfoRow
-                label="Plazo solicitado"
-                value={
-                  app.requested_term_months
-                    ? `${app.requested_term_months} meses`
-                    : null
-                }
-              />
-              <InfoRow label="Destino del crédito" value={app.purpose} block />
-            </dl>
-          </section>
-
-          {/* Dictamen */}
+        {/* Columna derecha (3 cols): Dictamen cuando corresponda + Historial */}
+        <div className="lg:col-span-3 space-y-4">
+          {/* Dictamen - solo cuando el legajo está en fase de dictamen */}
           {showDictamenForm ? (
             <LegajoDictamenForm
               applicationId={app.id}
               existingDictamen={existingDictamen ?? null}
               applicationStatus={app.status}
             />
-          ) : (
-            <section className="rounded-xl border border-gray-200 bg-white p-5 text-center">
-              <p className="text-sm text-gray-500">
-                Este legajo no está en una fase de dictamen.
-              </p>
-            </section>
-          )}
+          ) : null}
 
           {/* Historial */}
           {history.length > 0 ? (
@@ -321,51 +290,17 @@ export default async function LegajoDetallePage({
               </ul>
             </section>
           ) : null}
+
+          {/* Placeholder si no hay historial ni dictamen */}
+          {!showDictamenForm && history.length === 0 ? (
+            <section className="rounded-xl border border-gray-200 border-dashed bg-white p-5 text-center">
+              <p className="text-xs text-gray-400">
+                Primera solicitud del cliente
+              </p>
+            </section>
+          ) : null}
         </div>
       </div>
-    </div>
-  )
-}
-
-// ============================================================
-// COMPONENTES INTERNOS
-// ============================================================
-
-function InfoRow({
-  label,
-  value,
-  mono,
-  block,
-}: {
-  label: string
-  value: string | null | undefined
-  mono?: boolean
-  block?: boolean
-}) {
-  if (block) {
-    return (
-      <div className="px-4 py-2.5">
-        <dt className="text-xs text-gray-500 mb-1">{label}</dt>
-        <dd
-          className={`text-sm ${mono ? "font-mono" : ""} ${
-            value ? "text-gray-900" : "text-gray-400 italic"
-          }`}
-        >
-          {value || "—"}
-        </dd>
-      </div>
-    )
-  }
-  return (
-    <div className="flex items-start justify-between gap-3 px-4 py-2.5">
-      <dt className="text-xs text-gray-500 shrink-0">{label}</dt>
-      <dd
-        className={`text-sm text-right ${mono ? "font-mono" : ""} ${
-          value ? "text-gray-900" : "text-gray-400 italic"
-        }`}
-      >
-        {value || "—"}
-      </dd>
     </div>
   )
 }
