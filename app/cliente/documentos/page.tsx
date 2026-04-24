@@ -4,7 +4,6 @@ import { createClient } from "@/lib/supabase/server"
 import {
   ArrowLeft,
   Building2,
-  Send,
   FileText,
   AlertTriangle,
   CheckCircle2,
@@ -26,7 +25,6 @@ import {
 } from "@/lib/constants/roles"
 import { DocumentRow } from "@/components/cliente/document-row"
 import { AdditionalDocumentRow } from "@/components/cliente/additional-document-row"
-import { SubmitApplicationButton } from "@/components/cliente/submit-application-button"
 
 type DocByIdEntry = {
   id: string
@@ -73,7 +71,7 @@ export default async function ClientDocumentsPage() {
         <Empty
           icon={Building2}
           title="Terminá tu onboarding primero"
-          message={`Estás en el paso ${client.onboarding_step} de 5. Completalo para iniciar una solicitud.`}
+          message={`Estás en el paso ${client.onboarding_step} de 6. Completalo para enviar tu solicitud.`}
           href="/cliente/onboarding"
           label="Continuar onboarding"
         />
@@ -103,6 +101,7 @@ export default async function ClientDocumentsPage() {
       bucket === "rejected")
 
   if (bucket === "awaiting_funding_line_choice") {
+    // Bucket deprecado en el flujo nuevo, lo dejamos como fallback
     return (
       <div className="max-w-3xl mx-auto space-y-5">
         <Link
@@ -199,7 +198,7 @@ export default async function ClientDocumentsPage() {
 }
 
 // ============================================================
-// FASE INICIAL (paso 2-3): docs según tipo de cliente
+// FASE INICIAL: docs según tipo de cliente
 // ============================================================
 
 async function InitialPhaseContent({
@@ -239,8 +238,10 @@ async function InitialPhaseContent({
   const allCompleted = completedCount === totalCount
   const progressPct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0
 
-  const canSubmit = (status === "draft" || status === "docs_requested") && allCompleted
-  const isEditable = status === "draft" || status === "docs_requested"
+  // En el flujo nuevo el legajo nunca queda en draft desde documentos
+  // (se envía al finalizar el onboarding). Solo queda editable si el oficial
+  // pidió más docs (docs_requested).
+  const isEditable = status === "docs_requested"
   const isReadOnly = !isEditable
 
   const rejectedDocs = documents?.filter(
@@ -309,9 +310,8 @@ async function InitialPhaseContent({
                 Documentación enviada
               </h3>
               <p className="mt-1 text-sm text-gray-700">
-                Ya enviaste esta documentación a WORCAP y está en revisión.
-                Podés consultarla pero no modificarla mientras está en este
-                estado.
+                Tu solicitud está con WORCAP. Podés consultar la documentación
+                pero no modificarla mientras está en revisión.
               </p>
             </div>
           </div>
@@ -363,34 +363,12 @@ async function InitialPhaseContent({
           ))}
         </ul>
       </section>
-
-      {canSubmit && (
-        <section className="rounded-xl border-2 border-[#1b38e8] bg-[#1b38e8]/5 p-6">
-          <div className="flex items-start gap-4">
-            <div className="h-12 w-12 rounded-lg bg-[#1b38e8] grid place-items-center shrink-0">
-              <Send className="h-6 w-6 text-white" />
-            </div>
-            <div className="flex-1">
-              <h3 className="text-lg font-semibold text-gray-900">
-                Listo para enviar
-              </h3>
-              <p className="mt-1 text-sm text-gray-700">
-                Cuando lo envíes, un analista de WORCAP va a empezar a revisar
-                tu documentación inicial.
-              </p>
-              <div className="mt-4">
-                <SubmitApplicationButton applicationId={appId} />
-              </div>
-            </div>
-          </div>
-        </section>
-      )}
     </>
   )
 }
 
 // ============================================================
-// FASE ADICIONAL (paso 5+): docs según línea elegida
+// FASE ADICIONAL: docs según línea elegida
 // ============================================================
 
 async function AdditionalPhaseContent({
@@ -444,7 +422,6 @@ async function AdditionalPhaseContent({
 
   const isEditable = status === "additional_docs_pending"
   const isReadOnly = !isEditable
-  const canSubmit = isEditable && allCompleted
 
   return (
     <>
@@ -548,42 +525,18 @@ async function AdditionalPhaseContent({
         </section>
       )}
 
-      {canSubmit && (
-        <section className="rounded-xl border-2 border-[#1b38e8] bg-[#1b38e8]/5 p-6">
-          <div className="flex items-start gap-4">
-            <div className="h-12 w-12 rounded-lg bg-[#1b38e8] grid place-items-center shrink-0">
-              <Send className="h-6 w-6 text-white" />
-            </div>
-            <div className="flex-1">
-              <h3 className="text-lg font-semibold text-gray-900">
-                Documentación adicional completa
-              </h3>
-              <p className="mt-1 text-sm text-gray-700">
-                Subiste los {totalRequired} documentos requeridos. WORCAP
-                empezará la revisión económico-financiera ni bien lo notes en
-                el sistema.
-              </p>
-              <p className="mt-3 text-xs text-gray-500">
-                Por ahora, el analista detecta automáticamente cuando subís todo
-                y avanza al siguiente paso.
-              </p>
-            </div>
-          </div>
-        </section>
-      )}
-
       <details className="rounded-xl border border-gray-200 bg-white p-4 group">
         <summary className="cursor-pointer text-sm font-medium text-gray-700 flex items-center justify-between">
           <span className="flex items-center gap-2">
             <CheckCircle2 className="h-4 w-4 text-green-600" />
-            Documentación inicial enviada (paso 2)
+            Documentación inicial (ya revisada)
           </span>
           <ChevronDown className="h-4 w-4 text-gray-400 group-open:rotate-180 transition-transform" />
         </summary>
         <div className="mt-4 pt-4 border-t border-gray-100">
           <p className="text-xs text-gray-600 mb-3">
-            Esta documentación ya fue revisada y aprobada por el analista en el
-            paso anterior. Queda como referencia.
+            Esta documentación ya fue revisada y aprobada en la etapa anterior.
+            Queda como referencia.
           </p>
           <InitialDocsArchive appId={appId} />
         </div>
