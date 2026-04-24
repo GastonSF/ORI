@@ -9,14 +9,17 @@
 export const USER_ROLES = ["admin", "officer", "analyst", "client"] as const
 export type UserRole = (typeof USER_ROLES)[number]
 
-export const ROLE_LABELS: Record<UserRole, string> = {
+type UserRoleLabelMap = { [K in UserRole]: string }
+type UserRoleDashboardMap = { [K in UserRole]: string }
+
+export const ROLE_LABELS: UserRoleLabelMap = {
   admin: "Administrador",
   officer: "Oficial",
   analyst: "Analista de riesgos",
   client: "Cliente",
 }
 
-export const ROLE_DASHBOARDS: Record<UserRole, string> = {
+export const ROLE_DASHBOARDS: UserRoleDashboardMap = {
   admin: "/staff",
   officer: "/staff",
   analyst: "/staff",
@@ -45,7 +48,9 @@ export const CLIENT_TYPES = [
 ] as const
 export type ClientType = (typeof CLIENT_TYPES)[number]
 
-export const CLIENT_TYPE_LABELS: Record<ClientType, string> = {
+type ClientTypeLabelMap = { [K in ClientType]: string }
+
+export const CLIENT_TYPE_LABELS: ClientTypeLabelMap = {
   monotributo: "Monotributo",
   responsable_inscripto: "Responsable Inscripto",
   srl: "SRL",
@@ -60,7 +65,9 @@ export const CLIENT_TYPE_LABELS: Record<ClientType, string> = {
 export const CLIENT_STATUSES = ["active", "inactive", "blocked"] as const
 export type ClientStatus = (typeof CLIENT_STATUSES)[number]
 
-export const CLIENT_STATUS_LABELS: Record<ClientStatus, string> = {
+type ClientStatusLabelMap = { [K in ClientStatus]: string }
+
+export const CLIENT_STATUS_LABELS: ClientStatusLabelMap = {
   active: "Activo",
   inactive: "Inactivo",
   blocked: "Bloqueado",
@@ -72,12 +79,14 @@ export const CLIENT_STATUS_LABELS: Record<ClientStatus, string> = {
 export const FUNDING_LINES = ["fgplus", "financing_general"] as const
 export type FundingLine = (typeof FUNDING_LINES)[number]
 
-export const FUNDING_LINE_LABELS: Record<FundingLine, string> = {
+type FundingLineLabelMap = { [K in FundingLine]: string }
+
+export const FUNDING_LINE_LABELS: FundingLineLabelMap = {
   fgplus: "FGPlus",
   financing_general: "Financiamiento General",
 }
 
-export const FUNDING_LINE_DESCRIPTIONS: Record<FundingLine, string> = {
+export const FUNDING_LINE_DESCRIPTIONS: FundingLineLabelMap = {
   fgplus:
     "Para entidades financieras que prestan a sus socios o clientes. Pedimos composición de cartera, política de originación y el detalle de tu política de cobranza.",
   financing_general:
@@ -107,7 +116,9 @@ export const APPLICATION_STATUSES = [
 ] as const
 export type ApplicationStatus = (typeof APPLICATION_STATUSES)[number]
 
-export const APPLICATION_STATUS_LABELS: Record<ApplicationStatus, string> = {
+type ApplicationStatusLabelMap = { [K in ApplicationStatus]: string }
+
+export const APPLICATION_STATUS_LABELS: ApplicationStatusLabelMap = {
   draft: "Borrador",
   submitted: "Pendiente de recepción",
   pending_authorization: "Pendiente de recepción",
@@ -187,7 +198,9 @@ export const DOCUMENT_TYPES = [
 ] as const
 export type DocumentType = (typeof DOCUMENT_TYPES)[number]
 
-export const DOCUMENT_TYPE_LABELS: Record<DocumentType, string> = {
+type DocumentTypeLabelMap = { [K in DocumentType]: string }
+
+export const DOCUMENT_TYPE_LABELS: DocumentTypeLabelMap = {
   dni_titular: "DNI titular",
   constancia_afip: "Constancia de inscripción AFIP",
   estado_contable_ultimo: "Estado contable certificado (último)",
@@ -216,7 +229,9 @@ export const DOCUMENT_TYPE_LABELS: Record<DocumentType, string> = {
 /**
  * Documentos INICIALES requeridos según el tipo de cliente.
  */
-export const REQUIRED_DOCS_BY_CLIENT_TYPE: Record<ClientType, DocumentType[]> = {
+type RequiredDocsByClientTypeMap = { [K in ClientType]: DocumentType[] }
+
+export const REQUIRED_DOCS_BY_CLIENT_TYPE: RequiredDocsByClientTypeMap = {
   monotributo: [
     "dni_titular",
     "constancia_afip",
@@ -325,13 +340,15 @@ export const COLLECTION_CHANNELS = [
 ] as const
 export type CollectionChannel = (typeof COLLECTION_CHANNELS)[number]
 
-export const COLLECTION_CHANNEL_LABELS: Record<CollectionChannel, string> = {
+type CollectionChannelLabelMap = { [K in CollectionChannel]: string }
+
+export const COLLECTION_CHANNEL_LABELS: CollectionChannelLabelMap = {
   descuento_haberes: "Descuento de haberes",
   debito_cuenta: "Débito en cuenta",
   pago_voluntario: "Pago voluntario",
 }
 
-export const COLLECTION_CHANNEL_DESCRIPTIONS: Record<CollectionChannel, string> = {
+export const COLLECTION_CHANNEL_DESCRIPTIONS: CollectionChannelLabelMap = {
   descuento_haberes:
     "La cuota se descuenta directamente del sueldo del deudor. Es el canal con menor mora.",
   debito_cuenta:
@@ -344,7 +361,9 @@ export const COLLECTION_CHANNEL_DESCRIPTIONS: Record<CollectionChannel, string> 
 export const DEBITO_TIPOS = ["cuenta_corriente", "caja_ahorro"] as const
 export type DebitoTipo = (typeof DEBITO_TIPOS)[number]
 
-export const DEBITO_TIPO_LABELS: Record<DebitoTipo, string> = {
+type DebitoTipoLabelMap = { [K in DebitoTipo]: string }
+
+export const DEBITO_TIPO_LABELS: DebitoTipoLabelMap = {
   cuenta_corriente: "Cuenta corriente",
   caja_ahorro: "Caja de ahorro",
 }
@@ -360,19 +379,15 @@ export const COLLECTION_CODE_OWNERSHIPS = [
 ] as const
 export type CollectionCodeOwnership = (typeof COLLECTION_CODE_OWNERSHIPS)[number]
 
-export const COLLECTION_CODE_OWNERSHIP_LABELS: Record
-  CollectionCodeOwnership,
-  string
-> = {
+type OwnershipLabelMap = { [K in CollectionCodeOwnership]: string }
+
+export const COLLECTION_CODE_OWNERSHIP_LABELS: OwnershipLabelMap = {
   propio: "Propio",
   tercero_directo: "De otra entidad que me lo cede",
   tercero_sub_cedido: "De una cadena de cesión (A → B → yo)",
 }
 
-export const COLLECTION_CODE_OWNERSHIP_DESCRIPTIONS: Record
-  CollectionCodeOwnership,
-  string
-> = {
+export const COLLECTION_CODE_OWNERSHIP_DESCRIPTIONS: OwnershipLabelMap = {
   propio:
     "El código te pertenece directamente. Solo necesitás la autorización del ente que descuenta.",
   tercero_directo:
@@ -399,12 +414,14 @@ export const COLLECTION_CODE_OWNERSHIP_DESCRIPTIONS: Record
 //
 // Así que el único preset_doc que creamos automáticamente es el #2.
 
-export const FGPLUS_PRESET_DOCS: Array<{
+export type PresetDoc = {
   document_type: DocumentType
   document_name: string
   description: string
   is_required: boolean
-}> = [
+}
+
+export const FGPLUS_PRESET_DOCS: PresetDoc[] = [
   {
     document_type: "politica_originacion",
     document_name: "Política de originación",
@@ -420,11 +437,13 @@ export const FGPLUS_PRESET_DOCS: Array<{
 // FG sigue con su flujo simple: 3 docs sueltos como additional_document_requests.
 // NO tiene árbol ni composición de cartera.
 
-export const FINANCING_GENERAL_CHECKLIST: Array<{
+export type ChecklistDoc = {
   document_type: DocumentType
   document_name: string
   description: string
-}> = [
+}
+
+export const FINANCING_GENERAL_CHECKLIST: ChecklistDoc[] = [
   {
     document_type: "aval_personal",
     document_name: "Aval personal",
@@ -448,7 +467,9 @@ export const FINANCING_GENERAL_CHECKLIST: Array<{
 export const DOCUMENT_STATUSES = ["pending", "uploaded", "approved", "rejected"] as const
 export type DocumentStatus = (typeof DOCUMENT_STATUSES)[number]
 
-export const DOCUMENT_STATUS_LABELS: Record<DocumentStatus, string> = {
+type DocumentStatusLabelMap = { [K in DocumentStatus]: string }
+
+export const DOCUMENT_STATUS_LABELS: DocumentStatusLabelMap = {
   pending: "Pendiente",
   uploaded: "Subido",
   approved: "Aprobado",
@@ -461,7 +482,9 @@ export const DOCUMENT_STATUS_LABELS: Record<DocumentStatus, string> = {
 export const DOCUMENT_PHASES = ["initial", "additional"] as const
 export type DocumentPhase = (typeof DOCUMENT_PHASES)[number]
 
-export const DOCUMENT_PHASE_LABELS: Record<DocumentPhase, string> = {
+type DocumentPhaseLabelMap = { [K in DocumentPhase]: string }
+
+export const DOCUMENT_PHASE_LABELS: DocumentPhaseLabelMap = {
   initial: "Documentación inicial",
   additional: "Pedido de información",
 }
@@ -478,7 +501,9 @@ export const ADDL_DOC_REQUEST_STATUSES = [
 ] as const
 export type AddlDocRequestStatus = (typeof ADDL_DOC_REQUEST_STATUSES)[number]
 
-export const ADDL_DOC_REQUEST_STATUS_LABELS: Record<AddlDocRequestStatus, string> = {
+type AddlDocRequestStatusLabelMap = { [K in AddlDocRequestStatus]: string }
+
+export const ADDL_DOC_REQUEST_STATUS_LABELS: AddlDocRequestStatusLabelMap = {
   pending: "Pendiente",
   fulfilled: "Subido",
   approved: "Aprobado",
@@ -492,7 +517,9 @@ export const ADDL_DOC_REQUEST_STATUS_LABELS: Record<AddlDocRequestStatus, string
 export const DICTAMEN_DECISIONS = ["approved", "rejected", "observed"] as const
 export type DictamenDecision = (typeof DICTAMEN_DECISIONS)[number]
 
-export const DICTAMEN_DECISION_LABELS: Record<DictamenDecision, string> = {
+type DictamenDecisionLabelMap = { [K in DictamenDecision]: string }
+
+export const DICTAMEN_DECISION_LABELS: DictamenDecisionLabelMap = {
   approved: "Aprobado",
   rejected: "Rechazado",
   observed: "Observado",
@@ -600,14 +627,16 @@ export const STAFF_BUCKETS = [
 ] as const
 export type StaffBucket = (typeof STAFF_BUCKETS)[number]
 
-export const STAFF_BUCKET_LABELS: Record<StaffBucket, string> = {
+type StaffBucketLabelMap = { [K in StaffBucket]: string }
+
+export const STAFF_BUCKET_LABELS: StaffBucketLabelMap = {
   unassigned: "Sin asignar",
   action_worcap: "Acción WORCAP",
   waiting_client: "Esperando cliente",
   closed: "Cerrados",
 }
 
-export const STAFF_BUCKET_DESCRIPTIONS: Record<StaffBucket, string> = {
+export const STAFF_BUCKET_DESCRIPTIONS: StaffBucketLabelMap = {
   unassigned: "Legajos nuevos sin oficial asignado",
   action_worcap: "Hay algo para hacer del lado de WORCAP",
   waiting_client: "Estamos esperando que el cliente actúe",
@@ -649,7 +678,9 @@ export type StaffBucketColor = {
   dot: string
 }
 
-export const STAFF_BUCKET_COLORS: Record<StaffBucket, StaffBucketColor> = {
+type StaffBucketColorMap = { [K in StaffBucket]: StaffBucketColor }
+
+export const STAFF_BUCKET_COLORS: StaffBucketColorMap = {
   unassigned: {
     bg: "bg-gray-100",
     text: "text-gray-700",
