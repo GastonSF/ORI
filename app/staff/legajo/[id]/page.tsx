@@ -82,7 +82,7 @@ export default async function LegajoDetallePage({
   const { data: rawDocs } = await supabase
     .from("documents")
     .select(
-      "id, file_name, file_size_bytes, document_type, doc_phase, status, uploaded_at, created_at"
+      "id, file_name, file_size_bytes, document_type, doc_phase, status, uploaded_at, created_at, uploaded_on_behalf_by_staff"
     )
     .eq("application_id", id)
     .order("created_at", { ascending: true })
@@ -102,6 +102,7 @@ export default async function LegajoDetallePage({
     doc_phase: d.doc_phase as "initial" | "additional",
     status: d.status as "pending" | "uploaded" | "approved" | "rejected",
     uploaded_at: d.uploaded_at,
+    uploaded_on_behalf_by_staff: !!d.uploaded_on_behalf_by_staff,
   }))
 
   const additionalRequests = (rawAddlReqs ?? []).map((r) => ({
@@ -154,6 +155,14 @@ export default async function LegajoDetallePage({
     profile.role === "analyst" || profile.role === "admin"
   const showDictamenForm =
     isAnalystOrAdmin && (isDictaminable || !!existingDictamen)
+
+  // ¿Puede este staff subir docs en nombre del cliente?
+  //   - admin: siempre
+  //   - officer: solo si está asignado a este legajo
+  //   - analyst: nunca (solo revisa y dictamina)
+  const canUploadAsStaff =
+    profile.role === "admin" ||
+    (profile.role === "officer" && app.assigned_officer_id === user.id)
 
   return (
     <div className="space-y-5">
@@ -214,11 +223,16 @@ export default async function LegajoDetallePage({
 
       {/* Grid principal: Documentos a la izquierda/centro, Acciones a la derecha */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        {/* Documentos (9 cols) */}
+        {/* Documentos (8 cols) */}
         <div className="lg:col-span-8">
           <LegajoDocumentosPanel
             documents={documents}
             additionalRequests={additionalRequests}
+            applicationId={app.id}
+            applicationNumber={app.application_number}
+            clientType={client.client_type as ClientType}
+            clientId={client.id}
+            canUploadAsStaff={canUploadAsStaff}
           />
         </div>
 
