@@ -3,7 +3,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
-import { CLIENT_TYPES } from "@/lib/constants/roles"
+import { CLIENT_TYPES, FUNDING_LINES } from "@/lib/constants/roles"
 
 export type ActionResult<T = undefined> =
   | { ok: true; data?: T }
@@ -61,9 +61,19 @@ const companyMembersSchema = z.object({
   members: z.array(companyMemberSchema),
 })
 
+const fundingRequestSchema = z.object({
+  requested_amount: z
+    .number({ invalid_type_error: "Ingresá un monto válido" })
+    .positive("El monto tiene que ser mayor a 0")
+    .min(100_000, "El monto mínimo es $ 100.000")
+    .max(10_000_000_000, "El monto es demasiado alto"),
+  funding_line: z.enum(FUNDING_LINES),
+})
+
 export type SetClientTypeInput = z.infer<typeof setClientTypeSchema>
 export type GeneralDataInput = z.infer<typeof generalDataSchema>
 export type CompanyMembersInput = z.infer<typeof companyMembersSchema>
+export type FundingRequestInput = z.infer<typeof fundingRequestSchema>
 
 // ============================================================
 // SERVER ACTIONS
@@ -216,10 +226,96 @@ export async function saveCompanyMembersAction(
   return { ok: true }
 }
 
+// ============================================================
+// NUEVA: SOLICITUD DE FONDEO (monto + línea)
+// ============================================================
+// Se guarda en el legajo activo del cliente, no en la tabla clients.
+// Si todavía no existe legajo, se crea en status='draft'.
+
+export async function saveFundingRequestAction(
+  input: FundingRequestInput
+): Promise<ActionResult> {
+  const parsed = fundingRequestSchema.safeParse(input)
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Datos inválidos",
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    }
+  }
+
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { ok: false, error: "No autenticado" }
+
+  const { data: client } = await supabase
+    .from("clients")
+    .select("id, onboarding_step")
+    .eq("owner_user_id", user.id)
+    .single()
+  if (!client) {
+    return { ok: false, error: "Cliente no encontrado. Completá los pasos anteriores." }
+  }
+
+  // Buscar legajo activo (o crear uno en draft si no hay)
+  const { data: activeApp } = await supabase
+    .from("applications")
+    .select("id, status")
+    .eq("client_id", client.id)
+    .not(
+      "status",
+      "in",
+      `(approved,rejected_by_officer,rejected_by_analyst,cancelled_by_client,cancelled_by_worcap)`
+    )
+    .maybeSingle()
+
+  let appId: string
+  if (activeApp) {
+    appId = activeApp.id
+    const { error: upErr } = await supabase
+      .from("applications")
+      .update({
+        requested_amount: parsed.data.requested_amount,
+        funding_line: parsed.data.funding_line,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", activeApp.id)
+    if (upErr) return { ok: false, error: upErr.message }
+  } else {
+    const { data: newApp, error: insErr } = await supabase
+      .from("applications")
+      .insert({
+        client_id: client.id,
+        status: "draft",
+        current_owner_role: "client",
+        requested_amount: parsed.data.requested_amount,
+        funding_line: parsed.data.funding_line,
+      })
+      .select("id")
+      .single()
+    if (insErr || !newApp) {
+      return { ok: false, error: insErr?.message ?? "No pudimos crear el legajo" }
+    }
+    appId = newApp.id
+  }
+
+  // Avanzar onboarding_step del cliente al paso 5 (Documentación)
+  const { error: stepErr } = await supabase
+    .from("clients")
+    .update({ onboarding_step: Math.max(client.onboarding_step, 5) })
+    .eq("id", client.id)
+  if (stepErr) return { ok: false, error: stepErr.message }
+
+  revalidatePath("/cliente")
+  revalidatePath("/cliente/onboarding")
+  revalidatePath("/cliente/solicitud")
+  return { ok: true }
+}
+
 export async function markOnboardingStepAction(input: {
   step: number
 }): Promise<ActionResult> {
-  if (input.step < 1 || input.step > 5) return { ok: false, error: "Paso inválido" }
+  if (input.step < 1 || input.step > 6) return { ok: false, error: "Paso inválido" }
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { ok: false, error: "No autenticado" }
@@ -253,7 +349,7 @@ export async function completeOnboardingAction(): Promise<ActionResult> {
 
   const { error } = await supabase
     .from("clients")
-    .update({ onboarding_completed: true, onboarding_step: 5 })
+    .update({ onboarding_completed: true, onboarding_step: 6 })
     .eq("id", client.id)
   if (error) return { ok: false, error: error.message }
   revalidatePath("/cliente")
