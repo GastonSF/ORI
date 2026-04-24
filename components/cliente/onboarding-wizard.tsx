@@ -5,10 +5,11 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { ChevronLeft, LogOut, Check, Circle } from "lucide-react"
 import type { Client, CompanyMember } from "@/types/database.types"
-import type { DocumentType } from "@/lib/constants/roles"
+import type { DocumentType, FundingLine } from "@/lib/constants/roles"
 import { StepClientType } from "./steps/step-client-type"
 import { StepGeneralData } from "./steps/step-general-data"
 import { StepCompanyStructure } from "./steps/step-company-structure"
+import { StepFundingRequest } from "./steps/step-funding-request"
 import { StepDocumentation } from "./steps/step-documentation"
 import { StepReview } from "./steps/step-review"
 
@@ -28,21 +29,29 @@ type Props = {
   applicationId: string | null
   applicationNumber: string | null
   existingDocs: Record<string, ExistingDoc>
+  // Datos del legajo activo para pre-cargar la sección "Tu solicitud"
+  requestedAmount: number | null
+  fundingLine: FundingLine | null
 }
 
+// Ahora son 6 secciones (antes 5). La 4 es la nueva "Tu solicitud".
 const SECTIONS = [
   { n: 1, title: "Tu empresa", hint: "Qué tipo de organización sos" },
   { n: 2, title: "Datos generales", hint: "Información de contacto y fiscal" },
   { n: 3, title: "Quiénes la integran", hint: "Titulares y socios" },
-  { n: 4, title: "Documentación", hint: "Papeles de respaldo" },
-  { n: 5, title: "Revisión y envío", hint: "Todo en orden, lo enviás" },
+  { n: 4, title: "Tu solicitud", hint: "Cuánto solicitás y qué línea" },
+  { n: 5, title: "Documentación", hint: "Papeles de respaldo" },
+  { n: 6, title: "Revisión y envío", hint: "Todo en orden, lo enviás" },
 ]
 
+const TOTAL_SECTIONS = 6
+
+// Timeline del viaje completo: ahora son 7 pasos (antes 8).
+// El paso "Elegí tu línea" desapareció porque el cliente lo elige en el onboarding.
 const JOURNEY_STEPS = [
   "Contanos sobre vos",
   "Recibimos tu solicitud",
   "Revisamos tus documentos",
-  "Elegí tu línea de crédito",
   "Sumá la documentación de tu línea",
   "Revisamos lo que sumaste",
   "Analizamos tu solicitud",
@@ -56,6 +65,8 @@ export function OnboardingWizard({
   applicationId,
   applicationNumber,
   existingDocs,
+  requestedAmount,
+  fundingLine,
 }: Props) {
   const router = useRouter()
   const [currentSection, setCurrentSection] = useState(initialStep)
@@ -72,7 +83,7 @@ export function OnboardingWizard({
   }
 
   const advanceToNext = () => {
-    const nextSection = Math.min(currentSection + 1, 5)
+    const nextSection = Math.min(currentSection + 1, TOTAL_SECTIONS)
     setLocalMaxReached((prev) => Math.max(prev, nextSection))
     setCurrentSection(nextSection)
     router.replace(`/cliente/onboarding?paso=${nextSection}`, { scroll: false })
@@ -121,7 +132,7 @@ export function OnboardingWizard({
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-[11px] font-medium text-[#1b38e8] uppercase tracking-wide">
-                Paso 1 de 8
+                Paso 1 de {JOURNEY_STEPS.length}
               </p>
               <p className="text-sm font-semibold text-gray-900 truncate">{JOURNEY_STEPS[0]}</p>
             </div>
@@ -209,7 +220,15 @@ export function OnboardingWizard({
               {currentSection === 3 && (
                 <StepCompanyStructure client={client} members={members} onDone={advanceToNext} />
               )}
-              {currentSection === 4 && client && (
+              {currentSection === 4 && (
+                <StepFundingRequest
+                  client={client}
+                  existingAmount={requestedAmount}
+                  existingLine={fundingLine}
+                  onDone={advanceToNext}
+                />
+              )}
+              {currentSection === 5 && client && (
                 <StepDocumentation
                   client={client}
                   applicationId={applicationId}
@@ -218,7 +237,7 @@ export function OnboardingWizard({
                   onDone={advanceToNext}
                 />
               )}
-              {currentSection === 5 && client && (
+              {currentSection === 6 && client && (
                 <StepReview client={client} members={members} uploadedDocTypes={uploadedDocTypes} />
               )}
             </div>
