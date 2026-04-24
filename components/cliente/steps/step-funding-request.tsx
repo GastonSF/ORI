@@ -4,26 +4,23 @@ import { useState, useTransition } from "react"
 import { Loader2, DollarSign, Building2, TrendingUp } from "lucide-react"
 import { toast } from "sonner"
 import type { Client } from "@/types/database.types"
-import { FUNDING_LINES, FUNDING_LINE_LABELS, type FundingLine } from "@/lib/constants/roles"
+import { FUNDING_LINES, FUNDING_LINE_LABELS } from "@/lib/constants/roles"
+import type { FundingLine } from "@/lib/constants/roles"
 import { saveFundingRequestAction } from "@/lib/actions/client"
 
-type Props = {
-  client: Client | null
-  existingAmount: number | null
-  existingLine: FundingLine | null
-  onDone: () => void
+type LineInfo = {
+  shortDesc: string
+  forWhom: string
+  docsPreview: string[]
+  icon: React.ReactNode
 }
 
-// Descripciones y previews de docs por línea
-const LINE_INFO: Record
-  FundingLine,
-  {
-    shortDesc: string
-    forWhom: string
-    docsPreview: string[]
-    icon: React.ReactNode
-  }
-> = {
+type LineInfoMap = {
+  fgplus: LineInfo
+  financing_general: LineInfo
+}
+
+const LINE_INFO: LineInfoMap = {
   fgplus: {
     shortDesc: "FGPlus",
     forWhom: "Para entidades financieras que prestan a sus socios o clientes.",
@@ -46,6 +43,13 @@ const LINE_INFO: Record
   },
 }
 
+type Props = {
+  client: Client | null
+  existingAmount: number | null
+  existingLine: FundingLine | null
+  onDone: () => void
+}
+
 export function StepFundingRequest({
   client,
   existingAmount,
@@ -60,7 +64,6 @@ export function StepFundingRequest({
   const [isPending, startTransition] = useTransition()
 
   const handleAmountChange = (raw: string) => {
-    // Permitir solo dígitos
     const cleaned = raw.replace(/[^\d]/g, "")
     setAmount(cleaned)
     setErrors((e) => ({ ...e, amount: "" }))
@@ -117,8 +120,7 @@ export function StepFundingRequest({
       }}
     >
       <p className="text-sm text-gray-600">
-        Cuánto solicitás y qué tipo de línea te conviene. Podés cambiarlo antes
-        de enviar.
+        Cuánto solicitás y qué tipo de línea te conviene. Podés cambiarlo antes de enviar.
       </p>
 
       {/* ============== MONTO ============== */}
