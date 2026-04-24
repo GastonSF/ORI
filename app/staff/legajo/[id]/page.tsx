@@ -79,7 +79,6 @@ export default async function LegajoDetallePage({
     assigned_officer_name: assignedOfficer?.full_name ?? null,
   }
 
-  // Docs con join al revisor (para mostrar "Aprobado por Carlos Oficial")
   const { data: rawDocs } = await supabase
     .from("documents")
     .select(
@@ -143,7 +142,6 @@ export default async function LegajoDetallePage({
     .eq("application_id", id)
     .maybeSingle()
 
-  // Histórico del cliente
   const { data: rawHistory } = await supabase
     .from("applications")
     .select(
@@ -177,13 +175,13 @@ export default async function LegajoDetallePage({
   const showDictamenForm =
     isAnalystOrAdmin && (isDictaminable || !!existingDictamen)
 
-  // Permisos de acción sobre docs:
-  //   - admin: siempre
-  //   - officer: solo si está asignado al legajo
-  //   - analyst: nunca (solo revisa al dictaminar)
   const canActOnDocs =
     profile.role === "admin" ||
     (profile.role === "officer" && app.assigned_officer_id === user.id)
+
+  // ¿Hay algo que mostrar en la columna derecha?
+  // Si no, los docs ocupan todo el ancho para alinearse con el header.
+  const hasRightColumn = showDictamenForm || history.length > 0
 
   return (
     <div className="space-y-5">
@@ -236,7 +234,6 @@ export default async function LegajoDetallePage({
             </div>
           </div>
 
-          {/* Botón de asignación a la derecha */}
           <div className="shrink-0">
             <LegajoAssignmentButton
               applicationId={app.id}
@@ -250,10 +247,9 @@ export default async function LegajoDetallePage({
         </div>
       </header>
 
-      {/* Grid principal: Documentos anchos + columna derecha angosta */}
+      {/* Grid principal: adaptativo según si hay columna derecha o no */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        {/* Documentos (9 cols - más anchos ahora) */}
-        <div className="lg:col-span-9">
+        <div className={hasRightColumn ? "lg:col-span-9" : "lg:col-span-12"}>
           <LegajoDocumentosPanel
             documents={documents}
             additionalRequests={additionalRequests}
@@ -266,57 +262,56 @@ export default async function LegajoDetallePage({
           />
         </div>
 
-        {/* Columna derecha (3 cols): Dictamen cuando corresponda + Historial */}
-        <div className="lg:col-span-3 space-y-4">
-          {/* Dictamen - solo cuando el legajo está en fase de dictamen */}
-          {showDictamenForm ? (
-            <LegajoDictamenForm
-              applicationId={app.id}
-              existingDictamen={existingDictamen ?? null}
-              applicationStatus={app.status}
-            />
-          ) : null}
+        {hasRightColumn ? (
+          <div className="lg:col-span-3 space-y-4">
+            {showDictamenForm ? (
+              <LegajoDictamenForm
+                applicationId={app.id}
+                existingDictamen={existingDictamen ?? null}
+                applicationStatus={app.status}
+              />
+            ) : null}
 
-          {/* Historial */}
-          {history.length > 0 ? (
-            <section className="rounded-xl border border-gray-200 bg-white overflow-hidden">
-              <div className="px-4 py-2.5 border-b border-gray-100 flex items-center gap-2">
-                <History className="h-3.5 w-3.5 text-gray-500" />
-                <h2 className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-                  Historial ({history.length})
-                </h2>
-              </div>
-              <ul className="divide-y divide-gray-100">
-                {history.map((h) => (
-                  <li
-                    key={h.id}
-                    className="flex items-center justify-between px-4 py-2.5"
-                  >
-                    <div>
-                      <p className="font-mono text-xs font-semibold text-gray-900">
-                        {h.application_number}
-                      </p>
-                      <p className="text-[11px] text-gray-500">
-                        {new Date(h.created_at).toLocaleDateString("es-AR", {
-                          month: "short",
-                          year: "numeric",
-                        })}
-                      </p>
-                    </div>
-                    <span
-                      className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${getHistoryBadgeClass(
-                        h.status,
-                        h.decision
-                      )}`}
+            {history.length > 0 ? (
+              <section className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+                <div className="px-4 py-2.5 border-b border-gray-100 flex items-center gap-2">
+                  <History className="h-3.5 w-3.5 text-gray-500" />
+                  <h2 className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                    Historial ({history.length})
+                  </h2>
+                </div>
+                <ul className="divide-y divide-gray-100">
+                  {history.map((h) => (
+                    <li
+                      key={h.id}
+                      className="flex items-center justify-between px-4 py-2.5"
                     >
-                      {APPLICATION_STATUS_LABELS[h.status]}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ) : null}
-        </div>
+                      <div>
+                        <p className="font-mono text-xs font-semibold text-gray-900">
+                          {h.application_number}
+                        </p>
+                        <p className="text-[11px] text-gray-500">
+                          {new Date(h.created_at).toLocaleDateString("es-AR", {
+                            month: "short",
+                            year: "numeric",
+                          })}
+                        </p>
+                      </div>
+                      <span
+                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${getHistoryBadgeClass(
+                          h.status,
+                          h.decision
+                        )}`}
+                      >
+                        {APPLICATION_STATUS_LABELS[h.status]}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </div>
   )
