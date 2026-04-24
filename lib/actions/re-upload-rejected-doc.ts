@@ -22,10 +22,9 @@ const schema = z.object({
 })
 
 type Input = z.infer<typeof schema>
+type ReUploadResult = ActionResult<{ new_document_id: string }>
 
-export async function reUploadRejectedDocAction(
-  input: Input
-): Promise<ActionResult<{ new_document_id: string }>> {
+export async function reUploadRejectedDocAction(input: Input): Promise<ReUploadResult> {
   const parsed = schema.safeParse(input)
   if (!parsed.success) {
     return {
@@ -110,8 +109,7 @@ export async function reUploadRejectedDocAction(
   if (existingReplacement) {
     return {
       ok: false,
-      error:
-        "Ya subiste una versión nueva de este documento. Refrescá la página para verla.",
+      error: "Ya subiste una versión nueva de este documento. Refrescá la página para verla.",
     }
   }
 
@@ -178,7 +176,7 @@ export async function reUploadRejectedDocAction(
 // LISTAR DOCS RECHAZADOS DEL CLIENTE (activos, sin reemplazo)
 // ============================================================
 
-type RejectedDocActive = {
+export type RejectedDocActive = {
   id: string
   application_id: string
   application_number: string
@@ -188,9 +186,9 @@ type RejectedDocActive = {
   reviewed_at: string | null
 }
 
-export async function getActiveRejectedDocsAction(): Promise
-  ActionResult<RejectedDocActive[]>
-> {
+type ListResult = ActionResult<RejectedDocActive[]>
+
+export async function getActiveRejectedDocsAction(): Promise<ListResult> {
   const supabase = await createClient()
   const {
     data: { user },
