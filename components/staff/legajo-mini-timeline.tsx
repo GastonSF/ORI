@@ -15,22 +15,20 @@ type Props = {
 /**
  * Mini-timeline visual del legajo en idioma del cliente.
  *
- * Los 8 pasos del viaje:
+ * Los 7 pasos del viaje (flujo nuevo - la línea se elige en el onboarding):
  *  1. Contanos sobre vos           (cliente: onboarding completo)
  *  2. Recibimos tu solicitud       (worcap: acuse de recibo)
  *  3. Revisamos tus documentos     (worcap: oficial revisa iniciales)
- *  4. Elegí tu línea de crédito    (cliente)
- *  5. Sumá la documentación...     (cliente)
- *  6. Revisamos lo que sumaste     (worcap)
- *  7. Analizamos tu solicitud      (worcap: analista)
- *  8. Tenés una respuesta          (resultado)
+ *  4. Sumá la documentación...     (cliente: docs específicos de la línea)
+ *  5. Revisamos lo que sumaste     (worcap)
+ *  6. Analizamos tu solicitud      (worcap: analista)
+ *  7. Tenés una respuesta          (resultado)
  */
 
 const CLIENT_LABELS: string[] = [
   "Contanos sobre vos",
   "Recibimos tu solicitud",
   "Revisamos tus documentos",
-  "Elegí tu línea de crédito",
   "Sumá la documentación de tu línea",
   "Revisamos lo que sumaste",
   "Analizamos tu solicitud",
@@ -41,7 +39,6 @@ const CLIENT_LABELS_SHORT: string[] = [
   "Tus datos",
   "Recibimos",
   "Revisión",
-  "Línea",
   "Completar",
   "Verificación",
   "Análisis",
@@ -108,7 +105,8 @@ function Dot({
   const isCompleted = idx < currentIdx
   const isCurrent = idx === currentIdx
   const isFuture = idx > currentIdx
-  const isLastStep = idx === 7
+  // En el timeline de 7 pasos, el último índice es 6 (antes era 7)
+  const isLastStep = idx === TIMELINE_STEPS.length - 1
 
   if (isApproved) {
     if (isLastStep) return <span className="h-1.5 w-1.5 rounded-full bg-emerald-600 ring-2 ring-emerald-200" />
