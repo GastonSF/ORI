@@ -1,11 +1,13 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useTransition } from "react"
 import { toast } from "sonner"
-import { FileText, CheckCircle2, XCircle, CircleDashed, AlertCircle, Loader2, ChevronLeft, ChevronRight, ExternalLink, Image as ImageIcon, FileIcon, Upload, UserCog } from "lucide-react"
+import { FileText, CheckCircle2, XCircle, CircleDashed, AlertCircle, Loader2, ChevronLeft, ChevronRight, ExternalLink, Image as ImageIcon, FileIcon, Upload, UserCog, ThumbsUp, ThumbsDown, RotateCcw, MessageCircle } from "lucide-react"
 import { getStaffDocumentSignedUrlAction } from "@/lib/actions/staff-documents"
+import { approveDocumentAction, revertDocumentReviewAction } from "@/lib/actions/review-document"
 import { DOCUMENT_TYPE_LABELS, type DocumentType, type ClientType } from "@/lib/constants/roles"
 import { LegajoUploadDocModal } from "@/components/staff/legajo-upload-doc-modal"
+import { LegajoRejectDocModal } from "@/components/staff/legajo-reject-doc-modal"
 
 type Doc = {
   id: string
@@ -16,6 +18,9 @@ type Doc = {
   status: "pending" | "uploaded" | "approved" | "rejected"
   uploaded_at: string | null
   uploaded_on_behalf_by_staff?: boolean
+  review_notes?: string | null
+  reviewed_at?: string | null
+  reviewed_by_name?: string | null
 }
 
 type AddlReq = {
@@ -30,12 +35,12 @@ type AddlReq = {
 type Props = {
   documents: Doc[]
   additionalRequests: AddlReq[]
-  // Props nuevas para habilitar el upload en nombre del cliente
   applicationId: string
   applicationNumber: string
   clientType: ClientType
   clientId: string
   canUploadAsStaff: boolean
+  canReviewDocs: boolean
 }
 
 type DocItem = {
@@ -47,6 +52,9 @@ type DocItem = {
   isRequired?: boolean
   uploadedByStaff?: boolean
   documentType?: string
+  reviewNotes?: string | null
+  reviewedAt?: string | null
+  reviewedByName?: string | null
 }
 
 type PreviewState = {
@@ -63,6 +71,7 @@ export function LegajoDocumentosPanel({
   clientType,
   clientId,
   canUploadAsStaff,
+  canReviewDocs,
 }: Props) {
   const flatList = useMemo<DocItem[]>(() => {
     const items: DocItem[] = []
@@ -75,6 +84,9 @@ export function LegajoDocumentosPanel({
         section: "initial",
         uploadedByStaff: !!d.uploaded_on_behalf_by_staff,
         documentType: d.document_type,
+        reviewNotes: d.review_notes,
+        reviewedAt: d.reviewed_at,
+        reviewedByName: d.reviewed_by_name,
       })
     })
     additionalRequests.forEach((req) => {
@@ -90,6 +102,9 @@ export function LegajoDocumentosPanel({
           isRequired: req.is_required,
           uploadedByStaff: !!doc.uploaded_on_behalf_by_staff,
           documentType: doc.document_type,
+          reviewNotes: doc.review_notes,
+          reviewedAt: doc.reviewed_at,
+          reviewedByName: doc.reviewed_by_name,
         })
       }
     })
@@ -111,6 +126,8 @@ export function LegajoDocumentosPanel({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [uploadOpen, setUploadOpen] = useState(false)
+  const [rejectOpen, setRejectOpen] = useState(false)
+  const [isActing, startActing] = useTransition()
 
   const selected = flatList[selectedIdx]
 
@@ -161,6 +178,30 @@ export function LegajoDocumentosPanel({
     document.addEventListener("keydown", handler)
     return () => document.removeEventListener("keydown", handler)
   }, [flatList.length])
+
+  const handleApprove = () => {
+    if (!selected) return
+    startActing(async () => {
+      const res = await approveDocumentAction({ document_id: selected.docId })
+      if (!res.ok) {
+        toast.error(res.error)
+        return
+      }
+      toast.success(`${selected.label} aprobado`)
+    })
+  }
+
+  const handleRevert = () => {
+    if (!selected) return
+    startActing(async () => {
+      const res = await revertDocumentReviewAction({ document_id: selected.docId })
+      if (!res.ok) {
+        toast.error(res.error)
+        return
+      }
+      toast.success(`Revisión de ${selected.label} revertida`)
+    })
+  }
 
   const initialItems = flatList.filter((i) => i.section === "initial")
   const additionalItems = flatList.filter((i) => i.section === "additional")
@@ -254,6 +295,7 @@ export function LegajoDocumentosPanel({
           <div className="rounded-xl border border-gray-200 bg-white overflow-hidden flex flex-col" style={{ minHeight: "600px" }}>
             {selected ? (
               <>
+                {/* Toolbar principal del preview */}
                 <div className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-gray-100 bg-gray-50/50">
                   <div className="flex items-center gap-2 min-w-0 flex-1">
                     <button type="button" onClick={() => setSelectedIdx((i) => Math.max(i - 1, 0))} disabled={selectedIdx === 0} className="p-1 rounded-md hover:bg-gray-100 text-gray-600 disabled:text-gray-300 disabled:cursor-not-allowed transition-colors" title="Documento anterior"><ChevronLeft className="h-4 w-4" /></button>
@@ -278,6 +320,30 @@ export function LegajoDocumentosPanel({
                   </div>
                 </div>
 
+                {/* Barra de revisión (aprobar/rechazar/revertir) */}
+                {canReviewDocs ? (
+                  <ReviewBar
+                    status={selected.status}
+                    reviewNotes={selected.reviewNotes}
+                    reviewedAt={selected.reviewedAt}
+                    reviewedByName={selected.reviewedByName}
+                    isActing={isActing}
+                    onApprove={handleApprove}
+                    onReject={() => setRejectOpen(true)}
+                    onRevert={handleRevert}
+                  />
+                ) : selected.status === "rejected" && selected.reviewNotes ? (
+                  // Si no puede actuar pero el doc está rechazado, igual mostramos el motivo
+                  <div className="px-4 py-2.5 border-b border-gray-100 bg-red-50/50 flex items-start gap-2">
+                    <MessageCircle className="h-3.5 w-3.5 text-red-600 shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0 text-[11px] text-red-800">
+                      <p className="font-medium">Motivo del rechazo</p>
+                      <p className="text-red-700">{selected.reviewNotes}</p>
+                    </div>
+                  </div>
+                ) : null}
+
+                {/* Preview del archivo */}
                 <div className="flex-1 bg-gray-100 flex items-center justify-center overflow-auto">
                   {loading ? (
                     <div className="flex flex-col items-center gap-2 text-gray-500">
@@ -324,7 +390,162 @@ export function LegajoDocumentosPanel({
         clientId={clientId}
         alreadyUploadedTypes={alreadyUploadedTypes}
       />
+
+      {selected ? (
+        <LegajoRejectDocModal
+          open={rejectOpen}
+          onClose={() => setRejectOpen(false)}
+          documentId={selected.docId}
+          documentLabel={selected.label}
+          fileName={selected.fileName}
+        />
+      ) : null}
     </>
+  )
+}
+
+// ============================================================
+// BARRA DE REVISIÓN (aprobar/rechazar/revertir según estado)
+// ============================================================
+
+function ReviewBar({
+  status,
+  reviewNotes,
+  reviewedAt,
+  reviewedByName,
+  isActing,
+  onApprove,
+  onReject,
+  onRevert,
+}: {
+  status: "pending" | "uploaded" | "approved" | "rejected"
+  reviewNotes: string | null | undefined
+  reviewedAt: string | null | undefined
+  reviewedByName: string | null | undefined
+  isActing: boolean
+  onApprove: () => void
+  onReject: () => void
+  onRevert: () => void
+}) {
+  // pending: el cliente todavía no subió nada, no hay botones
+  if (status === "pending") {
+    return null
+  }
+
+  // uploaded: botones de aprobar/rechazar
+  if (status === "uploaded") {
+    return (
+      <div className="px-4 py-2 border-b border-gray-100 bg-white flex items-center justify-between gap-3">
+        <p className="text-[11px] text-gray-500">
+          Pendiente de revisión
+        </p>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={onApprove}
+            disabled={isActing}
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {isActing ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <ThumbsUp className="h-3 w-3" />
+            )}
+            Aprobar
+          </button>
+          <button
+            type="button"
+            onClick={onReject}
+            disabled={isActing}
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-white border border-red-300 text-red-700 text-xs font-medium hover:bg-red-50 disabled:opacity-50 transition-colors"
+          >
+            <ThumbsDown className="h-3 w-3" />
+            Rechazar
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // approved: chip verde + opción de revertir
+  if (status === "approved") {
+    return (
+      <div className="px-4 py-2 border-b border-gray-100 bg-emerald-50/60 flex items-center justify-between gap-3">
+        <div className="flex items-start gap-2 min-w-0 flex-1">
+          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0 mt-0.5" />
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-medium text-emerald-800">
+              Aprobado
+              {reviewedByName ? <span className="font-normal"> · {reviewedByName}</span> : null}
+              {reviewedAt ? (
+                <span className="font-normal text-emerald-700">
+                  {" · "}
+                  {formatDate(reviewedAt)}
+                </span>
+              ) : null}
+            </p>
+            {reviewNotes ? (
+              <p className="text-[11px] text-emerald-700 mt-0.5 italic">{reviewNotes}</p>
+            ) : null}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onRevert}
+          disabled={isActing}
+          title="Revertir aprobación"
+          className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-white/50 border border-emerald-200 text-emerald-700 text-[10px] font-medium hover:bg-white disabled:opacity-50 transition-colors shrink-0"
+        >
+          {isActing ? (
+            <Loader2 className="h-2.5 w-2.5 animate-spin" />
+          ) : (
+            <RotateCcw className="h-2.5 w-2.5" />
+          )}
+          Revertir
+        </button>
+      </div>
+    )
+  }
+
+  // rejected: chip rojo con motivo + opción de revertir
+  return (
+    <div className="px-4 py-2 border-b border-gray-100 bg-red-50/60 flex items-start justify-between gap-3">
+      <div className="flex items-start gap-2 min-w-0 flex-1">
+        <XCircle className="h-3.5 w-3.5 text-red-600 shrink-0 mt-0.5" />
+        <div className="min-w-0 flex-1">
+          <p className="text-[11px] font-medium text-red-800">
+            Rechazado
+            {reviewedByName ? <span className="font-normal"> · {reviewedByName}</span> : null}
+            {reviewedAt ? (
+              <span className="font-normal text-red-700">
+                {" · "}
+                {formatDate(reviewedAt)}
+              </span>
+            ) : null}
+          </p>
+          {reviewNotes ? (
+            <p className="text-[11px] text-red-700 mt-0.5">
+              <span className="font-medium">Motivo: </span>
+              {reviewNotes}
+            </p>
+          ) : null}
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={onRevert}
+        disabled={isActing}
+        title="Revertir rechazo"
+        className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-white/50 border border-red-200 text-red-700 text-[10px] font-medium hover:bg-white disabled:opacity-50 transition-colors shrink-0"
+      >
+        {isActing ? (
+          <Loader2 className="h-2.5 w-2.5 animate-spin" />
+        ) : (
+          <RotateCcw className="h-2.5 w-2.5" />
+        )}
+        Revertir
+      </button>
+    </div>
   )
 }
 
@@ -379,4 +600,17 @@ function getStatusIcon(status: "pending" | "uploaded" | "approved" | "rejected")
   if (status === "rejected") return <XCircle className="h-3.5 w-3.5 text-red-600" />
   if (status === "uploaded") return <AlertCircle className="h-3.5 w-3.5 text-amber-500" />
   return <CircleDashed className="h-3.5 w-3.5 text-gray-300" />
+}
+
+function formatDate(iso: string): string {
+  try {
+    return new Date(iso).toLocaleString("es-AR", {
+      day: "2-digit",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+  } catch {
+    return iso
+  }
 }
