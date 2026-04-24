@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useMemo } from "react"
 import { toast } from "sonner"
-import { FileText, CheckCircle2, XCircle, CircleDashed, AlertCircle, Loader2, ChevronLeft, ChevronRight, ExternalLink, Image as ImageIcon, FileIcon } from "lucide-react"
+import { FileText, CheckCircle2, XCircle, CircleDashed, AlertCircle, Loader2, ChevronLeft, ChevronRight, ExternalLink, Image as ImageIcon, FileIcon, Upload, UserCog } from "lucide-react"
 import { getStaffDocumentSignedUrlAction } from "@/lib/actions/staff-documents"
-import { DOCUMENT_TYPE_LABELS, type DocumentType } from "@/lib/constants/roles"
+import { DOCUMENT_TYPE_LABELS, type DocumentType, type ClientType } from "@/lib/constants/roles"
+import { LegajoUploadDocModal } from "@/components/staff/legajo-upload-doc-modal"
 
 type Doc = {
   id: string
@@ -14,6 +15,7 @@ type Doc = {
   doc_phase: "initial" | "additional"
   status: "pending" | "uploaded" | "approved" | "rejected"
   uploaded_at: string | null
+  uploaded_on_behalf_by_staff?: boolean
 }
 
 type AddlReq = {
@@ -28,6 +30,12 @@ type AddlReq = {
 type Props = {
   documents: Doc[]
   additionalRequests: AddlReq[]
+  // Props nuevas para habilitar el upload en nombre del cliente
+  applicationId: string
+  applicationNumber: string
+  clientType: ClientType
+  clientId: string
+  canUploadAsStaff: boolean
 }
 
 type DocItem = {
@@ -37,6 +45,8 @@ type DocItem = {
   status: "pending" | "uploaded" | "approved" | "rejected"
   section: "initial" | "additional"
   isRequired?: boolean
+  uploadedByStaff?: boolean
+  documentType?: string
 }
 
 type PreviewState = {
@@ -45,7 +55,15 @@ type PreviewState = {
   fileName: string
 }
 
-export function LegajoDocumentosPanel({ documents, additionalRequests }: Props) {
+export function LegajoDocumentosPanel({
+  documents,
+  additionalRequests,
+  applicationId,
+  applicationNumber,
+  clientType,
+  clientId,
+  canUploadAsStaff,
+}: Props) {
   const flatList = useMemo<DocItem[]>(() => {
     const items: DocItem[] = []
     documents.filter((d) => d.doc_phase === "initial").forEach((d) => {
@@ -55,6 +73,8 @@ export function LegajoDocumentosPanel({ documents, additionalRequests }: Props) 
         fileName: d.file_name,
         status: d.status,
         section: "initial",
+        uploadedByStaff: !!d.uploaded_on_behalf_by_staff,
+        documentType: d.document_type,
       })
     })
     additionalRequests.forEach((req) => {
@@ -68,6 +88,8 @@ export function LegajoDocumentosPanel({ documents, additionalRequests }: Props) 
           status: effectiveStatus as DocItem["status"],
           section: "additional",
           isRequired: req.is_required,
+          uploadedByStaff: !!doc.uploaded_on_behalf_by_staff,
+          documentType: doc.document_type,
         })
       }
     })
@@ -76,10 +98,19 @@ export function LegajoDocumentosPanel({ documents, additionalRequests }: Props) 
 
   const pendingAddl = useMemo(() => additionalRequests.filter((r) => !r.fulfilled_by_document_id), [additionalRequests])
 
+  const alreadyUploadedTypes = useMemo(
+    () =>
+      documents
+        .filter((d) => d.doc_phase === "initial")
+        .map((d) => d.document_type as string),
+    [documents]
+  )
+
   const [selectedIdx, setSelectedIdx] = useState<number>(0)
   const [preview, setPreview] = useState<PreviewState | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [uploadOpen, setUploadOpen] = useState(false)
 
   const selected = flatList[selectedIdx]
 
@@ -131,117 +162,169 @@ export function LegajoDocumentosPanel({ documents, additionalRequests }: Props) 
     return () => document.removeEventListener("keydown", handler)
   }, [flatList.length])
 
-  if (flatList.length === 0 && pendingAddl.length === 0) {
-    return (
-      <section className="rounded-xl border border-gray-200 bg-white p-12 text-center">
-        <FileText className="h-10 w-10 text-gray-300 mx-auto mb-2" />
-        <p className="text-sm text-gray-500">No hay documentos cargados.</p>
-      </section>
-    )
-  }
-
   const initialItems = flatList.filter((i) => i.section === "initial")
   const additionalItems = flatList.filter((i) => i.section === "additional")
+  const hasAnything = flatList.length > 0 || pendingAddl.length > 0
 
   return (
-    <section className="grid grid-cols-12 gap-4">
-      <div className="col-span-12 md:col-span-4 lg:col-span-3">
-        <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
-          <div className="px-4 py-2.5 border-b border-gray-100">
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Documentos ({flatList.length})</p>
-          </div>
+    <>
+      <section className="grid grid-cols-12 gap-4">
+        <div className="col-span-12 md:col-span-4 lg:col-span-3">
+          <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+            <div className="px-4 py-2.5 border-b border-gray-100 flex items-center justify-between gap-2">
+              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                Documentos ({flatList.length})
+              </p>
+              {canUploadAsStaff ? (
+                <button
+                  type="button"
+                  onClick={() => setUploadOpen(true)}
+                  title="Subir en nombre del cliente"
+                  className="inline-flex items-center gap-1 text-[11px] font-medium text-[#1b38e8] hover:bg-[#eff3ff] px-2 py-0.5 rounded transition-colors"
+                >
+                  <Upload className="h-3 w-3" />
+                  Subir
+                </button>
+              ) : null}
+            </div>
 
-          {initialItems.length > 0 ? (
-            <>
-              <SectionLabel>Iniciales ({initialItems.length})</SectionLabel>
-              <ul className="divide-y divide-gray-100">
-                {initialItems.map((item) => {
-                  const idx = flatList.indexOf(item)
-                  return <DocListItem key={item.docId} item={item} selected={idx === selectedIdx} onSelect={() => setSelectedIdx(idx)} />
-                })}
-              </ul>
-            </>
-          ) : null}
-
-          {additionalItems.length > 0 ? (
-            <>
-              <SectionLabel>Adicionales ({additionalItems.length})</SectionLabel>
-              <ul className="divide-y divide-gray-100">
-                {additionalItems.map((item) => {
-                  const idx = flatList.indexOf(item)
-                  return <DocListItem key={item.docId} item={item} selected={idx === selectedIdx} onSelect={() => setSelectedIdx(idx)} />
-                })}
-              </ul>
-            </>
-          ) : null}
-
-          {pendingAddl.length > 0 ? (
-            <>
-              <SectionLabel>Pendientes ({pendingAddl.length})</SectionLabel>
-              <ul className="divide-y divide-gray-100">
-                {pendingAddl.map((req) => (
-                  <li key={req.id} className="px-3 py-2">
-                    <div className="flex items-start gap-2">
-                      <CircleDashed className="h-3.5 w-3.5 text-gray-300 shrink-0 mt-0.5" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-gray-600 truncate">{req.document_name}</p>
-                        <p className="text-[10px] text-gray-400 italic">No subido todavía</p>
-                      </div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </>
-          ) : null}
-        </div>
-      </div>
-
-      <div className="col-span-12 md:col-span-8 lg:col-span-9">
-        <div className="rounded-xl border border-gray-200 bg-white overflow-hidden flex flex-col" style={{ minHeight: "600px" }}>
-          {selected ? (
-            <>
-              <div className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-gray-100 bg-gray-50/50">
-                <div className="flex items-center gap-2 min-w-0 flex-1">
-                  <button type="button" onClick={() => setSelectedIdx((i) => Math.max(i - 1, 0))} disabled={selectedIdx === 0} className="p-1 rounded-md hover:bg-gray-100 text-gray-600 disabled:text-gray-300 disabled:cursor-not-allowed transition-colors" title="Documento anterior"><ChevronLeft className="h-4 w-4" /></button>
-                  <button type="button" onClick={() => setSelectedIdx((i) => Math.min(i + 1, flatList.length - 1))} disabled={selectedIdx === flatList.length - 1} className="p-1 rounded-md hover:bg-gray-100 text-gray-600 disabled:text-gray-300 disabled:cursor-not-allowed transition-colors" title="Documento siguiente"><ChevronRight className="h-4 w-4" /></button>
-                  <div className="min-w-0 flex-1 ml-1">
-                    <p className="text-xs font-medium text-gray-900 truncate">{selected.label}</p>
-                    <p className="text-[11px] text-gray-500 truncate font-mono">{selected.fileName}</p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className="text-[11px] text-gray-500">{selectedIdx + 1} / {flatList.length}</span>
-                  {preview ? <a href={preview.url} target="_blank" rel="noopener noreferrer" title="Abrir en nueva pestaña" className="p-1.5 rounded-md hover:bg-gray-100 text-gray-600 transition-colors"><ExternalLink className="h-3.5 w-3.5" /></a> : null}
-                </div>
-              </div>
-
-              <div className="flex-1 bg-gray-100 flex items-center justify-center overflow-auto">
-                {loading ? (
-                  <div className="flex flex-col items-center gap-2 text-gray-500">
-                    <Loader2 className="h-6 w-6 animate-spin" />
-                    <p className="text-xs">Cargando documento...</p>
-                  </div>
-                ) : error ? (
-                  <div className="flex flex-col items-center gap-2 text-red-600 px-6 text-center">
-                    <AlertCircle className="h-6 w-6" />
-                    <p className="text-xs">{error}</p>
-                    <button type="button" onClick={() => { toast.dismiss(); setError(null); setSelectedIdx((i) => i) }} className="text-xs text-[#1b38e8] hover:underline">Reintentar</button>
-                  </div>
-                ) : preview ? (
-                  <DocumentRenderer preview={preview} />
+            {!hasAnything ? (
+              <div className="p-8 text-center">
+                <FileText className="h-8 w-8 text-gray-300 mx-auto mb-2" />
+                <p className="text-xs text-gray-500">No hay documentos cargados.</p>
+                {canUploadAsStaff ? (
+                  <button
+                    type="button"
+                    onClick={() => setUploadOpen(true)}
+                    className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-[#1b38e8] hover:underline"
+                  >
+                    <Upload className="h-3 w-3" />
+                    Subir el primero
+                  </button>
                 ) : null}
               </div>
-            </>
-          ) : (
-            <div className="flex-1 flex flex-col items-center justify-center text-gray-400 p-8">
-              <FileText className="h-10 w-10 mb-2" />
-              <p className="text-sm">Seleccioná un documento para previsualizar</p>
-            </div>
-          )}
+            ) : null}
+
+            {initialItems.length > 0 ? (
+              <>
+                <SectionLabel>Iniciales ({initialItems.length})</SectionLabel>
+                <ul className="divide-y divide-gray-100">
+                  {initialItems.map((item) => {
+                    const idx = flatList.indexOf(item)
+                    return <DocListItem key={item.docId} item={item} selected={idx === selectedIdx} onSelect={() => setSelectedIdx(idx)} />
+                  })}
+                </ul>
+              </>
+            ) : null}
+
+            {additionalItems.length > 0 ? (
+              <>
+                <SectionLabel>Adicionales ({additionalItems.length})</SectionLabel>
+                <ul className="divide-y divide-gray-100">
+                  {additionalItems.map((item) => {
+                    const idx = flatList.indexOf(item)
+                    return <DocListItem key={item.docId} item={item} selected={idx === selectedIdx} onSelect={() => setSelectedIdx(idx)} />
+                  })}
+                </ul>
+              </>
+            ) : null}
+
+            {pendingAddl.length > 0 ? (
+              <>
+                <SectionLabel>Pendientes ({pendingAddl.length})</SectionLabel>
+                <ul className="divide-y divide-gray-100">
+                  {pendingAddl.map((req) => (
+                    <li key={req.id} className="px-3 py-2">
+                      <div className="flex items-start gap-2">
+                        <CircleDashed className="h-3.5 w-3.5 text-gray-300 shrink-0 mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium text-gray-600 truncate">{req.document_name}</p>
+                          <p className="text-[10px] text-gray-400 italic">No subido todavía</p>
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : null}
+          </div>
         </div>
-      </div>
-    </section>
+
+        <div className="col-span-12 md:col-span-8 lg:col-span-9">
+          <div className="rounded-xl border border-gray-200 bg-white overflow-hidden flex flex-col" style={{ minHeight: "600px" }}>
+            {selected ? (
+              <>
+                <div className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-gray-100 bg-gray-50/50">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <button type="button" onClick={() => setSelectedIdx((i) => Math.max(i - 1, 0))} disabled={selectedIdx === 0} className="p-1 rounded-md hover:bg-gray-100 text-gray-600 disabled:text-gray-300 disabled:cursor-not-allowed transition-colors" title="Documento anterior"><ChevronLeft className="h-4 w-4" /></button>
+                    <button type="button" onClick={() => setSelectedIdx((i) => Math.min(i + 1, flatList.length - 1))} disabled={selectedIdx === flatList.length - 1} className="p-1 rounded-md hover:bg-gray-100 text-gray-600 disabled:text-gray-300 disabled:cursor-not-allowed transition-colors" title="Documento siguiente"><ChevronRight className="h-4 w-4" /></button>
+                    <div className="min-w-0 flex-1 ml-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <p className="text-xs font-medium text-gray-900 truncate">{selected.label}</p>
+                        {selected.uploadedByStaff ? (
+                          <span title="Subido por el oficial en nombre del cliente" className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-medium text-amber-700 bg-amber-50 border border-amber-200">
+                            <UserCog className="h-2.5 w-2.5" />
+                            oficial
+                          </span>
+                        ) : null}
+                      </div>
+                      <p className="text-[11px] text-gray-500 truncate font-mono">{selected.fileName}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-[11px] text-gray-500">{selectedIdx + 1} / {flatList.length}</span>
+                    {preview ? <a href={preview.url} target="_blank" rel="noopener noreferrer" title="Abrir en nueva pestaña" className="p-1.5 rounded-md hover:bg-gray-100 text-gray-600 transition-colors"><ExternalLink className="h-3.5 w-3.5" /></a> : null}
+                  </div>
+                </div>
+
+                <div className="flex-1 bg-gray-100 flex items-center justify-center overflow-auto">
+                  {loading ? (
+                    <div className="flex flex-col items-center gap-2 text-gray-500">
+                      <Loader2 className="h-6 w-6 animate-spin" />
+                      <p className="text-xs">Cargando documento...</p>
+                    </div>
+                  ) : error ? (
+                    <div className="flex flex-col items-center gap-2 text-red-600 px-6 text-center">
+                      <AlertCircle className="h-6 w-6" />
+                      <p className="text-xs">{error}</p>
+                      <button type="button" onClick={() => { toast.dismiss(); setError(null); setSelectedIdx((i) => i) }} className="text-xs text-[#1b38e8] hover:underline">Reintentar</button>
+                    </div>
+                  ) : preview ? (
+                    <DocumentRenderer preview={preview} />
+                  ) : null}
+                </div>
+              </>
+            ) : (
+              <div className="flex-1 flex flex-col items-center justify-center text-gray-400 p-8">
+                <FileText className="h-10 w-10 mb-2" />
+                <p className="text-sm">Seleccioná un documento para previsualizar</p>
+                {canUploadAsStaff ? (
+                  <button
+                    type="button"
+                    onClick={() => setUploadOpen(true)}
+                    className="mt-4 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#1b38e8] text-white text-xs font-medium hover:bg-[#1730c4] transition-colors"
+                  >
+                    <Upload className="h-3.5 w-3.5" />
+                    Subir en nombre del cliente
+                  </button>
+                ) : null}
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <LegajoUploadDocModal
+        open={uploadOpen}
+        onClose={() => setUploadOpen(false)}
+        applicationId={applicationId}
+        applicationNumber={applicationNumber}
+        clientType={clientType}
+        clientId={clientId}
+        alreadyUploadedTypes={alreadyUploadedTypes}
+      />
+    </>
   )
 }
 
@@ -261,10 +344,17 @@ function DocListItem({ item, selected, onSelect }: { item: DocItem; selected: bo
       <button type="button" onClick={onSelect} className={`w-full text-left px-3 py-2 transition-colors flex items-start gap-2 ${selected ? "bg-[#eff3ff] border-l-2 border-[#1b38e8]" : "hover:bg-gray-50 border-l-2 border-transparent"}`}>
         <div className="shrink-0 mt-0.5">{getStatusIcon(item.status)}</div>
         <div className="flex-1 min-w-0">
-          <p className={`text-xs font-medium truncate ${selected ? "text-[#1b38e8]" : "text-gray-900"}`}>
-            {item.label}
-            {item.isRequired === false ? <span className="text-[9px] text-gray-400 ml-1">(opcional)</span> : null}
-          </p>
+          <div className="flex items-center gap-1 flex-wrap">
+            <p className={`text-xs font-medium truncate ${selected ? "text-[#1b38e8]" : "text-gray-900"}`}>
+              {item.label}
+            </p>
+            {item.isRequired === false ? <span className="text-[9px] text-gray-400">(opcional)</span> : null}
+            {item.uploadedByStaff ? (
+              <span title="Subido por el oficial en nombre del cliente" className="inline-flex items-center px-1 py-0 rounded text-[8px] font-medium text-amber-700 bg-amber-50 border border-amber-200">
+                <UserCog className="h-2 w-2" />
+              </span>
+            ) : null}
+          </div>
           <p className="text-[10px] text-gray-500 truncate flex items-center gap-1 font-mono">
             <TypeIcon className="h-2.5 w-2.5 shrink-0" />
             {item.fileName}
