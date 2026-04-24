@@ -145,12 +145,14 @@ export async function advanceToAdditionalDocsAction(input: {
 
   const requestsToCreate = presetDocs.map((doc) => ({
     application_id: app.id,
+    funding_line: app.funding_line as FundingLine,
     document_name: doc.document_name,
     description: doc.description,
     is_required: doc.is_required,
+    is_preset: true,
     status: "pending" as const,
-    created_by: user.id,
-    created_at: nowIso,
+    requested_by: user.id,
+    requested_at: nowIso,
   }))
 
   const { error: reqErr } = await supabase
@@ -180,8 +182,8 @@ export async function advanceToAdditionalDocsAction(input: {
       .from("additional_document_requests")
       .delete()
       .eq("application_id", app.id)
-      .eq("created_by", user.id)
-      .gte("created_at", nowIso)
+      .eq("requested_by", user.id)
+      .gte("requested_at", nowIso)
     return {
       ok: false,
       error: `Error avanzando el legajo: ${updateErr.message}`,
