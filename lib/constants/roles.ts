@@ -213,8 +213,8 @@ export const DOCUMENT_TYPE_LABELS: Record<DocumentType, string> = {
 
 /**
  * Documentos INICIALES requeridos según el tipo de cliente (paso 2).
- * Los documentos adicionales (paso 4 del timeline) dependen de la línea
- * de fondeo elegida y se gestionan por additional_document_requests.
+ * Los documentos adicionales dependen de la línea de fondeo elegida
+ * y se gestionan por additional_document_requests.
  */
 export const REQUIRED_DOCS_BY_CLIENT_TYPE: Record<ClientType, DocumentType[]> = {
   monotributo: [
@@ -449,13 +449,17 @@ export function getStatusBucket(status: ApplicationStatus): StatusBucket {
  * El paso "Elegí tu línea" desapareció porque el cliente lo elige
  * en el onboarding antes de enviar.
  *
+ * El paso 2 "Documentación inicial" representa la ENTREGA de docs iniciales
+ * (se marca como completado apenas el cliente envía la solicitud).
+ * El paso 3 "Análisis" es donde vive el legajo mientras el oficial revisa.
+ *
  * Los labels en idioma del cliente viven en los componentes de UI.
  * Acá los shortLabel quedan técnicos para uso interno/fallback.
  */
 export const TIMELINE_STEPS = [
   { bucket: "draft", label: "Contanos sobre vos", shortLabel: "Datos" },
-  { bucket: "pending_review", label: "Recibimos tu solicitud", shortLabel: "Recibida" },
-  { bucket: "in_analysis", label: "Revisamos tus documentos", shortLabel: "Análisis" },
+  { bucket: "pending_review", label: "Documentación inicial", shortLabel: "Doc inicial" },
+  { bucket: "in_analysis", label: "Analizamos tus documentos", shortLabel: "Análisis" },
   { bucket: "additional_docs_pending", label: "Sumá la documentación de tu línea", shortLabel: "Docs extra" },
   { bucket: "additional_docs_review", label: "Revisamos lo que sumaste", shortLabel: "Revisión" },
   { bucket: "in_credit_analysis", label: "Analizamos tu solicitud", shortLabel: "Crediticio" },
@@ -468,19 +472,23 @@ export const TIMELINE_STEPS = [
 
 /**
  * Dado un bucket, devuelve el índice del paso correspondiente en TIMELINE_STEPS.
- * - docs_requested → el cliente vuelve al paso 2 (Recibimos tu solicitud)
- * - awaiting_funding_line_choice → deprecado, mapea al paso 2 (no debería ocurrir)
- * - rejected/cancelled → índice del último paso (Resultado) con flag de "failed"
+ *
+ * Clave del mapeo: apenas el cliente envía (submitted → pending_review),
+ * el dot salta directo al paso 3 (Análisis). El paso 2 (Doc inicial) queda
+ * como completado porque la entrega ya ocurrió.
+ *
+ * - docs_requested → vuelve al paso 3 (sigue en análisis con observaciones)
+ * - awaiting_funding_line_choice → deprecado, mapea al paso 3 (no debería ocurrir)
+ * - rejected/cancelled → índice del último paso (Resultado)
  */
 export function getTimelineIndex(bucket: StatusBucket): number {
   switch (bucket) {
     case "draft":
       return 0
     case "pending_review":
+    case "in_analysis":
     case "docs_requested":
     case "awaiting_funding_line_choice":
-      return 1
-    case "in_analysis":
       return 2
     case "additional_docs_pending":
       return 3
