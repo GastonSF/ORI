@@ -60,8 +60,6 @@ export default async function ClientDashboard() {
   // ============================================================
   // Docs rechazados "activos" (rechazados que NO fueron re-subidos)
   // ============================================================
-  // Query: docs con status='rejected' que no tienen hijos con
-  // source_document_id apuntando a ellos.
   let activeRejectedDocs: Array<{
     id: string
     application_id: string
@@ -135,7 +133,7 @@ export default async function ClientDashboard() {
   }
   const docsPending = totalDocsRequired - uploadedDocsCount
 
-  // Conteo de documentos ADICIONALES pendientes (fase 5)
+  // Conteo de documentos ADICIONALES pendientes
   let additionalDocsPending = 0
   if (displayedApp) {
     const { data: addlRequests } = await supabase
@@ -241,6 +239,7 @@ export default async function ClientDashboard() {
                 id: displayedApp.id,
                 application_number: displayedApp.application_number,
                 status: displayedApp.status,
+                funding_line: displayedApp.funding_line,
                 submitted_at: displayedApp.submitted_at,
               }
             : null
