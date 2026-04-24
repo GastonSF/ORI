@@ -13,7 +13,7 @@ type Props = {
 }
 
 /**
- * Timeline horizontal (desktop) / vertical (mobile) de 8 pasos.
+ * Timeline horizontal (desktop) / vertical (mobile) de 7 pasos.
  *
  * Colores según el paso y el estado global:
  *  - Paso completado: azul relleno con check
