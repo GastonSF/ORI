@@ -1,13 +1,16 @@
 "use client"
 
 import { useState, useTransition } from "react"
-import { CheckCircle2, Loader2 } from "lucide-react"
+import { CheckCircle2, Loader2, Send } from "lucide-react"
+import { toast } from "sonner"
 import type { Client, CompanyMember } from "@/types/database.types"
 import {
   CLIENT_TYPE_LABELS,
   REQUIRED_DOCS_BY_CLIENT_TYPE,
   DOCUMENT_TYPE_LABELS,
+  FUNDING_LINE_LABELS,
   type DocumentType,
+  type FundingLine,
 } from "@/lib/constants/roles"
 import { completeOnboardingAction } from "@/lib/actions/client"
 
@@ -15,9 +18,17 @@ type Props = {
   client: Client
   members: CompanyMember[]
   uploadedDocTypes?: DocumentType[]
+  requestedAmount?: number | null
+  fundingLine?: FundingLine | null
 }
 
-export function StepReview({ client, members, uploadedDocTypes = [] }: Props) {
+export function StepReview({
+  client,
+  members,
+  uploadedDocTypes = [],
+  requestedAmount,
+  fundingLine,
+}: Props) {
   const [pending, startTransition] = useTransition()
   const [serverError, setServerError] = useState<string | null>(null)
 
@@ -30,19 +41,24 @@ export function StepReview({ client, members, uploadedDocTypes = [] }: Props) {
     setServerError(null)
     startTransition(async () => {
       const result = await completeOnboardingAction()
-      if (result && !result.ok) setServerError(result.error)
+      if (result && !result.ok) {
+        setServerError(result.error)
+        toast.error(result.error)
+        return
+      }
+      toast.success("Tu solicitud fue enviada a WORCAP")
     })
   }
 
   return (
     <div>
-      <h2 className="text-xl font-semibold text-gray-900">Revisión y envío</h2>
-      <p className="mt-1 text-sm text-gray-600">
-        Revisá que los datos estén correctos antes de finalizar tu onboarding.
+      <p className="text-sm text-gray-600">
+        Revisá que todo esté en orden. Cuando envíes tu solicitud, un oficial va a empezar a revisarla.
       </p>
 
       <div className="mt-6 grid gap-4 md:grid-cols-2">
-        <Card title="Datos del cliente">
+        {/* Tu empresa */}
+        <Card title="Tu empresa">
           <Row label="Razón social" value={client.legal_name} />
           <Row label="CUIT" value={client.cuit} mono />
           <Row label="Tipo" value={CLIENT_TYPE_LABELS[client.client_type]} />
@@ -60,7 +76,24 @@ export function StepReview({ client, members, uploadedDocTypes = [] }: Props) {
           )}
         </Card>
 
-        <Card title="Checklist de documentos">
+        {/* Tu solicitud (monto + línea) */}
+        {requestedAmount && fundingLine ? (
+          <Card title="Tu solicitud">
+            <Row
+              label="Monto solicitado"
+              value={new Intl.NumberFormat("es-AR", {
+                style: "currency",
+                currency: "ARS",
+                maximumFractionDigits: 0,
+              }).format(requestedAmount)}
+              mono
+            />
+            <Row label="Línea de crédito" value={FUNDING_LINE_LABELS[fundingLine]} />
+          </Card>
+        ) : null}
+
+        {/* Checklist de documentos */}
+        <Card title="Documentación">
           <ul className="space-y-1.5">
             {requiredDocs.map((t) => {
               const done = uploadedDocTypes.includes(t as DocumentType)
@@ -81,7 +114,7 @@ export function StepReview({ client, members, uploadedDocTypes = [] }: Props) {
             })}
           </ul>
           <p className="mt-3 text-xs text-gray-500">
-            {completedCount} de {requiredDocs.length} completados
+            {completedCount} de {requiredDocs.length} subidos
           </p>
         </Card>
       </div>
@@ -116,9 +149,9 @@ export function StepReview({ client, members, uploadedDocTypes = [] }: Props) {
         </div>
       )}
 
-      <div className="mt-8 flex items-center justify-between">
-        <p className="text-sm text-gray-600">
-          Al finalizar, tu perfil queda listo para iniciar solicitudes de crédito.
+      <div className="mt-8 flex items-center justify-between gap-4 flex-wrap">
+        <p className="text-sm text-gray-600 max-w-md">
+          Al enviar, tu solicitud pasa a WORCAP. Un oficial va a revisar tu documentación y te va a avisar si necesita algo más.
         </p>
         <button
           type="button"
@@ -133,14 +166,18 @@ export function StepReview({ client, members, uploadedDocTypes = [] }: Props) {
             }
           }}
           disabled={pending}
-          className="rounded-md bg-[#1b38e8] px-5 py-2 text-sm font-semibold text-white hover:bg-[#1730c4] disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-md bg-[#1b38e8] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#1730c4] disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
         >
           {pending ? (
-            <span className="inline-flex items-center gap-2">
-              <Loader2 className="h-4 w-4 animate-spin" /> Finalizando...
-            </span>
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Enviando...
+            </>
           ) : (
-            "Finalizar onboarding"
+            <>
+              <Send className="h-4 w-4" />
+              Enviar mi solicitud
+            </>
           )}
         </button>
       </div>
