@@ -29,12 +29,10 @@ type Props = {
   applicationId: string | null
   applicationNumber: string | null
   existingDocs: Record<string, ExistingDoc>
-  // Datos del legajo activo para pre-cargar la sección "Tu solicitud"
   requestedAmount: number | null
   fundingLine: FundingLine | null
 }
 
-// Ahora son 6 secciones (antes 5). La 4 es la nueva "Tu solicitud".
 const SECTIONS = [
   { n: 1, title: "Tu empresa", hint: "Qué tipo de organización sos" },
   { n: 2, title: "Datos generales", hint: "Información de contacto y fiscal" },
@@ -46,8 +44,6 @@ const SECTIONS = [
 
 const TOTAL_SECTIONS = 6
 
-// Timeline del viaje completo: ahora son 7 pasos (antes 8).
-// El paso "Elegí tu línea" desapareció porque el cliente lo elige en el onboarding.
 const JOURNEY_STEPS = [
   "Contanos sobre vos",
   "Recibimos tu solicitud",
@@ -238,7 +234,13 @@ export function OnboardingWizard({
                 />
               )}
               {currentSection === 6 && client && (
-                <StepReview client={client} members={members} uploadedDocTypes={uploadedDocTypes} />
+                <StepReview
+                  client={client}
+                  members={members}
+                  uploadedDocTypes={uploadedDocTypes}
+                  requestedAmount={requestedAmount}
+                  fundingLine={fundingLine}
+                />
               )}
             </div>
 
