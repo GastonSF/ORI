@@ -16,7 +16,6 @@ const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024 // 25 MB
 
 /**
  * Slots de archivos posibles dentro de un código de descuento.
- * Cada slot tiene un document_type asociado para guardar en la tabla documents.
  */
 type CodeDocSlot =
   | "autorizacion_descuento"
@@ -24,21 +23,25 @@ type CodeDocSlot =
   | "convenio_nivel_2"
   | "autorizacion_mutual_original"
 
-const SLOT_TO_DOC_TYPE: { [K in CodeDocSlot]: DocumentType } = {
+type SlotToDocTypeMap = { [K in CodeDocSlot]: DocumentType }
+type SlotToColumnMap = { [K in CodeDocSlot]: string }
+type SlotToLabelMap = { [K in CodeDocSlot]: string }
+
+const SLOT_TO_DOC_TYPE: SlotToDocTypeMap = {
   autorizacion_descuento: "autorizacion_descuento",
   convenio_nivel_1: "convenio_terceros",
   convenio_nivel_2: "convenio_terceros",
   autorizacion_mutual_original: "autorizacion_descuento",
 }
 
-const SLOT_TO_COLUMN: { [K in CodeDocSlot]: string } = {
+const SLOT_TO_COLUMN: SlotToColumnMap = {
   autorizacion_descuento: "autorizacion_descuento_doc_id",
   convenio_nivel_1: "convenio_nivel_1_doc_id",
   convenio_nivel_2: "convenio_nivel_2_doc_id",
   autorizacion_mutual_original: "autorizacion_mutual_original_doc_id",
 }
 
-const SLOT_LABELS: { [K in CodeDocSlot]: string } = {
+const SLOT_LABELS: SlotToLabelMap = {
   autorizacion_descuento: "Autorización de descuento",
   convenio_nivel_1: "Convenio nivel 1",
   convenio_nivel_2: "Convenio nivel 2",
@@ -48,29 +51,22 @@ const SLOT_LABELS: { [K in CodeDocSlot]: string } = {
 // ============================================================
 // 1. PREPARE: pedir URL firmada para subir el archivo
 // ============================================================
-/**
- * Genera una URL firmada para que el cliente suba un archivo directo
- * a Supabase Storage. Crea la fila en documents con status='uploaded'
- * después de la subida (eso lo hace confirmCodeDocUpload).
- *
- * Devuelve:
- *   - upload_url: URL firmada para PUT (válida por 1 hora)
- *   - document_id: UUID que el cliente usa después en confirm
- *   - file_path: ruta donde quedó guardado (para auditoría)
- */
+
+type PrepareUploadData = {
+  document_id: string
+  upload_url: string
+  file_path: string
+}
+
+type PrepareUploadResult = ActionResult<PrepareUploadData>
+
 export async function prepareCodeDocUploadAction(input: {
   code_id: string
   slot: CodeDocSlot
   file_name: string
   file_size: number
   mime_type: string
-}): Promise
-  ActionResult<{
-    document_id: string
-    upload_url: string
-    file_path: string
-  }>
-> {
+}): Promise<PrepareUploadResult> {
   if (input.file_size > MAX_FILE_SIZE_BYTES) {
     return {
       ok: false,
@@ -186,14 +182,6 @@ export async function prepareCodeDocUploadAction(input: {
 // ============================================================
 // 2. CONFIRM: confirmar la subida y linkear al slot del código
 // ============================================================
-/**
- * Después de que el cliente subió el archivo a la URL firmada,
- * esta action linkea el document_id al slot correspondiente
- * en collection_codes (autorizacion_descuento_doc_id, etc).
- *
- * Si el slot ya tenía un document anterior asociado, lo elimina
- * (es un reemplazo, no una versión nueva como en el flujo de docs iniciales).
- */
 export async function confirmCodeDocUploadAction(input: {
   code_id: string
   slot: CodeDocSlot
@@ -252,7 +240,8 @@ export async function confirmCodeDocUploadAction(input: {
   }
 
   // Si ya había un doc en este slot, eliminarlo (reemplazo)
-  const previousDocIdMap: Record<CodeDocSlot, string | null> = {
+  type SlotMap = { [K in CodeDocSlot]: string | null }
+  const previousDocIdMap: SlotMap = {
     autorizacion_descuento: code.autorizacion_descuento_doc_id,
     convenio_nivel_1: code.convenio_nivel_1_doc_id,
     convenio_nivel_2: code.convenio_nivel_2_doc_id,
@@ -300,11 +289,6 @@ export async function confirmCodeDocUploadAction(input: {
 // ============================================================
 // 3. DELETE: eliminar un archivo de un slot del código
 // ============================================================
-/**
- * Elimina el archivo de un slot específico del código (sin borrar el código).
- * Saca el archivo del storage, lo borra de la tabla documents, y limpia
- * la columna correspondiente en collection_codes.
- */
 export async function deleteCodeDocumentAction(input: {
   code_id: string
   slot: CodeDocSlot
@@ -361,7 +345,8 @@ export async function deleteCodeDocumentAction(input: {
   }
 
   // Obtener el doc_id actual del slot
-  const docIdMap: Record<CodeDocSlot, string | null> = {
+  type SlotMap = { [K in CodeDocSlot]: string | null }
+  const docIdMap: SlotMap = {
     autorizacion_descuento: code.autorizacion_descuento_doc_id,
     convenio_nivel_1: code.convenio_nivel_1_doc_id,
     convenio_nivel_2: code.convenio_nivel_2_doc_id,
