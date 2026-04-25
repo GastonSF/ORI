@@ -4,9 +4,6 @@ import { requireRole } from "@/lib/auth/session"
 import { createClient } from "@/lib/supabase/server"
 import {
   ArrowLeft,
-  Package,
-  FileText,
-  Coins,
   Send,
 } from "lucide-react"
 import {
@@ -14,6 +11,9 @@ import {
   FUNDING_LINE_LABELS,
   type ApplicationStatus,
   type FundingLine,
+  type CollectionChannel,
+  type DebitoTipo,
+  type CollectionCodeOwnership,
 } from "@/lib/constants/roles"
 import { PedidoInfoCard } from "@/components/cliente/pedido-info-card"
 
@@ -54,13 +54,11 @@ export default async function PedidoInformacionPage() {
     .maybeSingle()
 
   if (!app) {
-    // No tiene legajo en esta fase, redirigir al dashboard
     redirect("/cliente")
   }
 
   const fundingLine = app.funding_line as FundingLine | null
   if (fundingLine !== "fgplus") {
-    // Para Financiamiento General usamos el flujo viejo
     redirect("/cliente/documentos")
   }
 
@@ -85,7 +83,9 @@ export default async function PedidoInformacionPage() {
     (r) => r.document_name === "Política de originación"
   )
 
+  // ============================================================
   // Estado de composición de cartera
+  // ============================================================
   const carteraSubidos = carteraRequests.filter(
     (r) => r.status === "fulfilled" || r.status === "approved"
   ).length
@@ -112,7 +112,9 @@ export default async function PedidoInformacionPage() {
           carteraSubidos !== 1 ? "s" : ""
         } de ${carteraRequeridos} sugerido${carteraRequeridos !== 1 ? "s" : ""}`
 
+  // ============================================================
   // Estado de política de originación
+  // ============================================================
   let polOrigState: "pending" | "in_progress" | "complete" | "rejected" = "pending"
   let polOrigProgress = "Sin empezar"
   if (politicaOriginacionRequest) {
@@ -136,7 +138,7 @@ export default async function PedidoInformacionPage() {
   }
 
   // ============================================================
-  // Estado de política de cobranza (árbol)
+  // Estado de política de cobranza (árbol completo con códigos)
   // ============================================================
   const { data: tree } = await supabase
     .from("funding_line_responses")
@@ -144,36 +146,76 @@ export default async function PedidoInformacionPage() {
     .eq("application_id", app.id)
     .maybeSingle()
 
-  const { data: codes } = await supabase
+  // Cargar TODOS los datos de los códigos para validar completitud
+  const { data: rawCodes } = await supabase
     .from("collection_codes")
-    .select("id, is_excluded")
+    .select(
+      `
+        id,
+        code_name,
+        ownership,
+        cedente_nivel_1_name,
+        cedente_nivel_2_name,
+        is_excluded,
+        autorizacion_descuento_doc_id,
+        convenio_nivel_1_doc_id,
+        convenio_nivel_2_doc_id,
+        autorizacion_mutual_original_doc_id
+      `
+    )
     .eq("application_id", app.id)
+
+  const codes = rawCodes ?? []
 
   let cobranzaState: "pending" | "in_progress" | "complete" | "rejected" = "pending"
   let cobranzaProgress = "Sin empezar"
 
   if (tree) {
-    const channelsCount = tree.channels?.length ?? 0
-    const codesCount = codes?.length ?? 0
+    const channels = (tree.channels ?? []) as CollectionChannel[]
+    const debitoTipos = (tree.debito_tipos ?? []) as DebitoTipo[]
+    const includesDescuento = channels.includes("descuento_haberes")
+    const includesDebito = channels.includes("debito_cuenta")
 
-    if (tree.completed_at) {
-      cobranzaState = "complete"
-      cobranzaProgress = "Enviada a WORCAP"
-    } else if (channelsCount === 0) {
+    if (channels.length === 0) {
       cobranzaState = "pending"
       cobranzaProgress = "Sin empezar"
     } else {
-      cobranzaState = "in_progress"
-      if (codesCount > 0) {
-        cobranzaProgress = `${channelsCount} canal${
-          channelsCount !== 1 ? "es" : ""
-        } · ${codesCount} código${codesCount !== 1 ? "s" : ""} cargado${
-          codesCount !== 1 ? "s" : ""
-        }`
-      } else {
-        cobranzaProgress = `${channelsCount} canal${
-          channelsCount !== 1 ? "es" : ""
-        } seleccionado${channelsCount !== 1 ? "s" : ""}`
+      // Validar todas las reglas de completitud
+      const codesValidos = codes.map((c) => isCodeComplete(c))
+      const codesIncompletos = codesValidos.filter((ok) => !ok).length
+      const codesActivos = codes.filter((c) => !c.is_excluded).length
+      const codesExcluidos = codes.filter((c) => c.is_excluded).length
+
+      // 1. Si débito sin tipo → in_progress
+      if (includesDebito && debitoTipos.length === 0) {
+        cobranzaState = "in_progress"
+        cobranzaProgress = pluralChannels(channels.length) + " · falta tipo de cuenta"
+      }
+      // 2. Si descuento sin códigos → in_progress
+      else if (includesDescuento && codes.length === 0) {
+        cobranzaState = "in_progress"
+        cobranzaProgress = pluralChannels(channels.length) + " · falta cargar códigos"
+      }
+      // 3. Si descuento con códigos pero algunos incompletos → in_progress
+      else if (includesDescuento && codesIncompletos > 0) {
+        cobranzaState = "in_progress"
+        const completos = codes.length - codesIncompletos
+        cobranzaProgress = `${pluralChannels(channels.length)} · ${completos} de ${codes.length} códigos completos`
+      }
+      // 4. Todo OK → complete
+      else {
+        cobranzaState = "complete"
+        if (includesDescuento && codes.length > 0) {
+          if (codesExcluidos > 0 && codesActivos > 0) {
+            cobranzaProgress = `${pluralChannels(channels.length)} · ${codesActivos} código${codesActivos !== 1 ? "s" : ""} listo${codesActivos !== 1 ? "s" : ""}, ${codesExcluidos} excluido${codesExcluidos !== 1 ? "s" : ""}`
+          } else if (codesExcluidos > 0) {
+            cobranzaProgress = `${pluralChannels(channels.length)} · ${codesExcluidos} código${codesExcluidos !== 1 ? "s" : ""} excluido${codesExcluidos !== 1 ? "s" : ""}`
+          } else {
+            cobranzaProgress = `${pluralChannels(channels.length)} · ${codes.length} código${codes.length !== 1 ? "s" : ""} listo${codes.length !== 1 ? "s" : ""}`
+          }
+        } else {
+          cobranzaProgress = pluralChannels(channels.length) + " seleccionado" + (channels.length !== 1 ? "s" : "")
+        }
       }
     }
   }
@@ -284,4 +326,59 @@ export default async function PedidoInformacionPage() {
       ) : null}
     </div>
   )
+}
+
+// ============================================================
+// HELPERS
+// ============================================================
+
+/**
+ * Devuelve "1 canal" o "N canales" según corresponda.
+ */
+function pluralChannels(n: number): string {
+  return n === 1 ? "1 canal" : `${n} canales`
+}
+
+/**
+ * Replica la lógica de completitud de la card del código.
+ * Excluido = completo a propósito.
+ */
+type RawCode = {
+  code_name: string
+  ownership: string
+  cedente_nivel_1_name: string | null
+  cedente_nivel_2_name: string | null
+  is_excluded: boolean
+  autorizacion_descuento_doc_id: string | null
+  convenio_nivel_1_doc_id: string | null
+  convenio_nivel_2_doc_id: string | null
+  autorizacion_mutual_original_doc_id: string | null
+}
+
+function isCodeComplete(c: RawCode): boolean {
+  if (c.is_excluded) return true
+  if (!c.code_name?.trim()) return false
+
+  const ownership = c.ownership as CollectionCodeOwnership
+  switch (ownership) {
+    case "propio":
+      return !!c.autorizacion_descuento_doc_id
+    case "tercero_directo":
+      return (
+        !!c.cedente_nivel_1_name?.trim() &&
+        !!c.convenio_nivel_1_doc_id &&
+        !!c.autorizacion_descuento_doc_id
+      )
+    case "tercero_sub_cedido":
+      return (
+        !!c.cedente_nivel_1_name?.trim() &&
+        !!c.cedente_nivel_2_name?.trim() &&
+        !!c.convenio_nivel_1_doc_id &&
+        !!c.autorizacion_descuento_doc_id &&
+        !!c.convenio_nivel_2_doc_id &&
+        !!c.autorizacion_mutual_original_doc_id
+      )
+    default:
+      return false
+  }
 }
