@@ -1,11 +1,12 @@
 import Link from "next/link"
-import { redirect, notFound } from "next/navigation"
+import { redirect } from "next/navigation"
 import { requireRole } from "@/lib/auth/session"
 import { createClient } from "@/lib/supabase/server"
 import { ArrowLeft, Package, FileSpreadsheet } from "lucide-react"
 import { type FundingLine } from "@/lib/constants/roles"
 import { AdditionalDocumentRow } from "@/components/cliente/additional-document-row"
 import { AddCarteraSlotButton } from "@/components/cliente/add-cartera-slot-button"
+import { BackToPedidoButton } from "@/components/cliente/back-to-pedido-button"
 
 const CARTERA_PREFIX = "Cartera — "
 
@@ -109,6 +110,9 @@ export default async function CarteraPage() {
     (r) => r.status === "fulfilled" || r.status === "approved"
   ).length
 
+  const isComplete =
+    sugeridos.length > 0 && sugeridosConArchivo.length >= sugeridos.length
+
   return (
     <div className="max-w-3xl mx-auto space-y-5">
       {/* Breadcrumb */}
@@ -203,6 +207,16 @@ export default async function CarteraPage() {
           <AddCarteraSlotButton applicationId={app.id} />
         </div>
       ) : null}
+
+      {/* Footer: volver al pedido */}
+      <BackToPedidoButton
+        isComplete={isComplete}
+        customMessage={
+          isReadOnly
+            ? "Ya enviaste el pedido. Estás viendo lo que cargaste."
+            : undefined
+        }
+      />
     </div>
   )
 }
