@@ -32,7 +32,7 @@ type CodeDoc = {
 }
 
 type Props = {
-  index: number // posición en la lista (1, 2, 3...) para mostrar "Código N"
+  index: number
   code: {
     id: string
     code_name: string
@@ -46,7 +46,6 @@ type Props = {
     convenio_nivel_2_doc_id: string | null
     autorizacion_mutual_original_doc_id: string | null
   }
-  // Documentos asociados a los slots (precargados)
   docs: {
     autorizacion_descuento: CodeDoc | null
     convenio_nivel_1: CodeDoc | null
@@ -56,23 +55,6 @@ type Props = {
   readOnly?: boolean
 }
 
-/**
- * Card de un código de descuento de haberes.
- *
- * Es la pieza más visual del árbol: muestra el formulario dinámico que
- * cambia según el ownership elegido. Cada radio button revela los slots
- * de upload + nombres de cedentes que correspondan.
- *
- * Modos:
- *   - Editable (additional_docs_pending): cliente puede modificar todo
- *   - ReadOnly (additional_docs_review): solo se muestra en consulta
- *
- * Estado local con auto-save:
- *   - Nombre del código y nombres de cedentes: se guardan al salir del input (onBlur)
- *   - Ownership: se guarda al cambiar el radio
- *   - Exclusión: modal con razón
- *   - Eliminar: confirm nativo
- */
 export function CollectionCodeCard({
   index,
   code,
@@ -83,19 +65,16 @@ export function CollectionCodeCard({
   const [pending, startTransition] = useTransition()
   const [saveError, setSaveError] = useState<string | null>(null)
 
-  // Estado local sincronizado con props
   const [codeName, setCodeName] = useState(code.code_name)
   const [ownership, setOwnership] = useState<CollectionCodeOwnership>(code.ownership)
   const [cedente1, setCedente1] = useState(code.cedente_nivel_1_name ?? "")
   const [cedente2, setCedente2] = useState(code.cedente_nivel_2_name ?? "")
 
-  // Modal de exclusión
   const [excludeModalOpen, setExcludeModalOpen] = useState(false)
   const [exclusionReason, setExclusionReason] = useState(
     code.exclusion_reason ?? ""
   )
 
-  // Resync si cambia la prop (después de router.refresh)
   useEffect(() => {
     setCodeName(code.code_name)
     setOwnership(code.ownership)
@@ -222,9 +201,10 @@ export function CollectionCodeCard({
   }
 
   // ============================================================
-  // Cálculo de completitud
+  // Cálculo de completitud + qué falta específicamente
   // ============================================================
-  const isComplete = checkCompleteness(code, docs)
+  const missingItems = computeMissingItems(code, docs)
+  const isComplete = missingItems.length === 0
 
   // ============================================================
   // Render
@@ -241,9 +221,9 @@ export function CollectionCodeCard({
             : "border-gray-200 bg-white"
         }`}
       >
-        {/* Header */}
+        {/* Header con título + pill de estado + botones */}
         <div className="flex items-start justify-between gap-3 mb-3">
-          <div className="flex items-center gap-2 min-w-0 flex-1">
+          <div className="flex items-center gap-2 min-w-0 flex-1 flex-wrap">
             {isExcluded ? (
               <EyeOff className="h-4 w-4 text-gray-400 shrink-0" />
             ) : isComplete ? (
@@ -253,12 +233,24 @@ export function CollectionCodeCard({
             )}
             <h3 className="text-sm font-semibold text-gray-900">
               Código {index}
-              {isExcluded && (
-                <span className="ml-2 text-[10px] font-medium px-2 py-0.5 rounded-full bg-gray-200 text-gray-600">
-                  Excluido del análisis
-                </span>
-              )}
             </h3>
+
+            {/* Pill de estado */}
+            {isExcluded ? (
+              <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 border border-gray-200">
+                Excluido del análisis
+              </span>
+            ) : isComplete ? (
+              <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                <CheckCircle2 className="h-2.5 w-2.5" />
+                Completo
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
+                <CircleDashed className="h-2.5 w-2.5" />
+                Falta info
+              </span>
+            )}
           </div>
 
           {!readOnly && (
@@ -493,6 +485,31 @@ export function CollectionCodeCard({
                 </>
               )}
             </div>
+
+            {/* Resumen visual: qué falta para completar */}
+            {!readOnly && missingItems.length > 0 && (
+              <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-3">
+                <p className="text-[11px] font-semibold text-amber-900 mb-1.5 flex items-center gap-1.5">
+                  <CircleDashed className="h-3 w-3" />
+                  Para completar este código te falta:
+                </p>
+                <ul className="space-y-0.5 text-[11px] text-amber-800 list-disc list-inside">
+                  {missingItems.map((item, idx) => (
+                    <li key={idx}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Resumen visual: completo */}
+            {!readOnly && isComplete && (
+              <div className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 p-3">
+                <p className="text-[11px] font-semibold text-emerald-800 flex items-center gap-1.5">
+                  <CheckCircle2 className="h-3 w-3" />
+                  Listo. Cargaste todo lo que necesitamos para este código.
+                </p>
+              </div>
+            )}
           </>
         )}
 
@@ -595,32 +612,60 @@ export function CollectionCodeCard({
 }
 
 // ============================================================
-// Helper: ¿el código está completo?
+// Helper: ¿qué le falta al código para estar completo?
+// Devuelve array de strings con cada item faltante.
+// Si está excluido o todo OK, devuelve [].
 // ============================================================
-function checkCompleteness(
+function computeMissingItems(
   code: Props["code"],
   docs: Props["docs"]
-): boolean {
-  if (code.is_excluded) return true // excluido = completo (a propósito)
-  if (!code.code_name.trim()) return false
+): string[] {
+  if (code.is_excluded) return []
+
+  const missing: string[] = []
+
+  if (!code.code_name.trim()) {
+    missing.push("Ponerle un nombre al código")
+  }
 
   switch (code.ownership) {
     case "propio":
-      return !!docs.autorizacion_descuento
+      if (!docs.autorizacion_descuento) {
+        missing.push("Subir la autorización del ente que descuenta")
+      }
+      break
     case "tercero_directo":
-      return (
-        !!code.cedente_nivel_1_name?.trim() &&
-        !!docs.convenio_nivel_1 &&
-        !!docs.autorizacion_descuento
-      )
+      if (!code.cedente_nivel_1_name?.trim()) {
+        missing.push("Indicar el nombre de la entidad que te cede el código")
+      }
+      if (!docs.convenio_nivel_1) {
+        missing.push("Subir el convenio con la entidad cedente")
+      }
+      if (!docs.autorizacion_descuento) {
+        missing.push("Subir la autorización del ente que descuenta")
+      }
+      break
     case "tercero_sub_cedido":
-      return (
-        !!code.cedente_nivel_1_name?.trim() &&
-        !!code.cedente_nivel_2_name?.trim() &&
-        !!docs.convenio_nivel_1 &&
-        !!docs.autorizacion_descuento &&
-        !!docs.convenio_nivel_2 &&
-        !!docs.autorizacion_mutual_original
-      )
+      if (!code.cedente_nivel_1_name?.trim()) {
+        missing.push("Indicar el nombre de la entidad que te cede directamente")
+      }
+      if (!code.cedente_nivel_2_name?.trim()) {
+        missing.push("Indicar el nombre de la entidad dueña original")
+      }
+      if (!docs.convenio_nivel_1) {
+        missing.push("Subir el convenio con la entidad cedente directa")
+      }
+      if (!docs.autorizacion_descuento) {
+        missing.push("Subir la autorización del ente que descuenta")
+      }
+      if (!docs.convenio_nivel_2) {
+        missing.push("Subir el convenio entre las dos entidades")
+      }
+      if (!docs.autorizacion_mutual_original) {
+        missing.push("Subir la autorización de la entidad dueña original")
+      }
+      break
   }
+
+  return missing
 }
