@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server"
 import { ArrowLeft, FileText, Lightbulb } from "lucide-react"
 import { type FundingLine } from "@/lib/constants/roles"
 import { AdditionalDocumentRow } from "@/components/cliente/additional-document-row"
+import { BackToPedidoButton } from "@/components/cliente/back-to-pedido-button"
 
 /**
  * Subpágina del pedido de información: política de originación.
@@ -109,6 +110,10 @@ export default async function PoliticaOriginacionPage() {
     }
   }
 
+  // ¿Está completa la sección? Sí cuando tiene archivo subido (fulfilled o approved)
+  const isComplete =
+    request.status === "fulfilled" || request.status === "approved"
+
   return (
     <div className="max-w-3xl mx-auto space-y-5">
       {/* Breadcrumb */}
@@ -185,6 +190,16 @@ export default async function PoliticaOriginacionPage() {
           readOnly={isReadOnly}
         />
       </ul>
+
+      {/* Footer: volver al pedido */}
+      <BackToPedidoButton
+        isComplete={isComplete}
+        customMessage={
+          isReadOnly
+            ? "Ya enviaste el pedido. Estás viendo lo que cargaste."
+            : undefined
+        }
+      />
     </div>
   )
 }
