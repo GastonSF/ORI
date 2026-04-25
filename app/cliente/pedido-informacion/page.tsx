@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server"
 import {
   ArrowLeft,
   Send,
+  CheckCircle2,
 } from "lucide-react"
 import {
   APPLICATION_STATUS_LABELS,
@@ -16,6 +17,7 @@ import {
   type CollectionCodeOwnership,
 } from "@/lib/constants/roles"
 import { PedidoInfoCard } from "@/components/cliente/pedido-info-card"
+import { SubmitInfoRequestButton } from "@/components/cliente/submit-info-request-button"
 
 /**
  * Página índice del "Pedido de información" para el cliente.
@@ -117,6 +119,7 @@ export default async function PedidoInformacionPage() {
   // ============================================================
   let polOrigState: "pending" | "in_progress" | "complete" | "rejected" = "pending"
   let polOrigProgress = "Sin empezar"
+  let politicaOriginacionOk = false
   if (politicaOriginacionRequest) {
     switch (politicaOriginacionRequest.status) {
       case "rejected":
@@ -126,10 +129,12 @@ export default async function PedidoInformacionPage() {
       case "approved":
         polOrigState = "complete"
         polOrigProgress = "Aprobada por WORCAP"
+        politicaOriginacionOk = true
         break
       case "fulfilled":
         polOrigState = "complete"
         polOrigProgress = "Documento subido"
+        politicaOriginacionOk = true
         break
       default:
         polOrigState = "pending"
@@ -170,11 +175,24 @@ export default async function PedidoInformacionPage() {
   let cobranzaState: "pending" | "in_progress" | "complete" | "rejected" = "pending"
   let cobranzaProgress = "Sin empezar"
 
+  // Datos para el resumen del modal de envío
+  let cobranzaCanales = 0
+  let cobranzaCodigosCompletos = 0
+  let cobranzaCodigosExcluidos = 0
+  let cobranzaCodigosTotal = 0
+
   if (tree) {
     const channels = (tree.channels ?? []) as CollectionChannel[]
     const debitoTipos = (tree.debito_tipos ?? []) as DebitoTipo[]
     const includesDescuento = channels.includes("descuento_haberes")
     const includesDebito = channels.includes("debito_cuenta")
+
+    cobranzaCanales = channels.length
+    cobranzaCodigosTotal = codes.length
+    cobranzaCodigosExcluidos = codes.filter((c) => c.is_excluded).length
+    cobranzaCodigosCompletos = codes.filter(
+      (c) => !c.is_excluded && isCodeComplete(c)
+    ).length
 
     if (channels.length === 0) {
       cobranzaState = "pending"
@@ -296,8 +314,8 @@ export default async function PedidoInformacionPage() {
         />
       </div>
 
-      {/* Botón "Enviar todo" */}
-      {!isReadOnly ? (
+      {/* Botón "Enviar todo" (solo si no está en read-only) */}
+      {!isReadOnly && (
         <div className="rounded-xl border border-gray-200 bg-white p-5">
           <div className="flex items-start gap-4">
             <div className="h-10 w-10 rounded-lg bg-[#eff3ff] grid place-items-center shrink-0">
@@ -312,18 +330,47 @@ export default async function PedidoInformacionPage() {
                   ? "Completaste todo. Revisá y enviá para que el oficial haga la verificación económico-financiera."
                   : "Tenés que completar las 3 secciones antes de poder enviar."}
               </p>
-              <button
-                type="button"
-                disabled={!allReady}
-                className="mt-3 inline-flex items-center gap-2 rounded-md bg-[#1b38e8] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1730c4] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                <Send className="h-4 w-4" />
-                Enviar pedido de información
-              </button>
+              <div className="mt-3">
+                <SubmitInfoRequestButton
+                  applicationId={app.id}
+                  applicationNumber={app.application_number}
+                  summary={{
+                    carteraSubidos,
+                    carteraSugeridos: carteraRequeridos,
+                    politicaOriginacionOk,
+                    cobranzaCanales,
+                    cobranzaCodigosCompletos,
+                    cobranzaCodigosExcluidos,
+                    cobranzaCodigosTotal,
+                  }}
+                  disabled={!allReady}
+                />
+              </div>
             </div>
           </div>
         </div>
-      ) : null}
+      )}
+
+      {/* Si está read-only (ya envió), mostrar confirmación */}
+      {isReadOnly && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-5">
+          <div className="flex items-start gap-4">
+            <div className="h-10 w-10 rounded-lg bg-emerald-100 grid place-items-center shrink-0">
+              <CheckCircle2 className="h-5 w-5 text-emerald-700" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-base font-semibold text-emerald-900">
+                Pedido enviado a WORCAP
+              </h3>
+              <p className="mt-1 text-sm text-emerald-800">
+                Tu pedido está siendo revisado por el oficial. Te avisaremos
+                por mail cuando tengamos novedades. Mientras tanto, podés
+                consultar lo que cargaste navegando las 3 secciones.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
