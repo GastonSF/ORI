@@ -10,6 +10,7 @@ import {
   type FundingLine,
 } from "@/lib/constants/roles"
 import { CobranzaTreeForm } from "@/components/cliente/cobranza-tree-form"
+import { BackToPedidoButton } from "@/components/cliente/back-to-pedido-button"
 
 /**
  * Subpágina del pedido de información: política de cobranza (árbol).
@@ -163,6 +164,68 @@ export default async function PoliticaCobranzaPage() {
     },
   }))
 
+  // ============================================================
+  // Cálculo de "isComplete" para el footer
+  // ============================================================
+  const channels = (tree.channels ?? []) as CollectionChannel[]
+  const debitoTipos = (tree.debito_tipos ?? []) as DebitoTipo[]
+  const includesDescuento = channels.includes("descuento_haberes")
+  const includesDebito = channels.includes("debito_cuenta")
+
+  // Función helper: ¿un código está completo?
+  const isCodeComplete = (c: typeof codesWithDocs[number]): boolean => {
+    if (c.is_excluded) return true
+    if (!c.code_name.trim()) return false
+    switch (c.ownership) {
+      case "propio":
+        return !!c.docs.autorizacion_descuento
+      case "tercero_directo":
+        return (
+          !!c.cedente_nivel_1_name?.trim() &&
+          !!c.docs.convenio_nivel_1 &&
+          !!c.docs.autorizacion_descuento
+        )
+      case "tercero_sub_cedido":
+        return (
+          !!c.cedente_nivel_1_name?.trim() &&
+          !!c.cedente_nivel_2_name?.trim() &&
+          !!c.docs.convenio_nivel_1 &&
+          !!c.docs.autorizacion_descuento &&
+          !!c.docs.convenio_nivel_2 &&
+          !!c.docs.autorizacion_mutual_original
+        )
+    }
+  }
+
+  // Reglas de completitud de la sección entera:
+  //  - Al menos 1 canal
+  //  - Si débito → al menos 1 tipo
+  //  - Si descuento → al menos 1 código + todos los códigos completos/excluidos
+  let isComplete = false
+  let customMessage: string | undefined
+
+  if (channels.length === 0) {
+    customMessage =
+      "Para empezar, marcá al menos un canal de cobranza arriba."
+  } else if (includesDebito && debitoTipos.length === 0) {
+    customMessage =
+      "Marcá al menos un tipo de cuenta para débito (cuenta corriente o caja de ahorro)."
+  } else if (includesDescuento && codesWithDocs.length === 0) {
+    customMessage =
+      "Agregá al menos un código de descuento de haberes."
+  } else if (includesDescuento) {
+    const allCodesOk = codesWithDocs.every(isCodeComplete)
+    if (!allCodesOk) {
+      customMessage =
+        "Tenés códigos incompletos. Completalos o marcalos como 'No tengo' antes de enviar el pedido."
+    } else {
+      isComplete = true
+    }
+  } else {
+    // No incluye descuento ni necesita más data → completo
+    isComplete = true
+  }
+
   return (
     <div className="max-w-3xl mx-auto space-y-5">
       {/* Breadcrumb */}
@@ -227,10 +290,20 @@ export default async function PoliticaCobranzaPage() {
       {/* El formulario */}
       <CobranzaTreeForm
         applicationId={app.id}
-        initialChannels={(tree.channels ?? []) as CollectionChannel[]}
-        initialDebitoTipos={(tree.debito_tipos ?? []) as DebitoTipo[]}
+        initialChannels={channels}
+        initialDebitoTipos={debitoTipos}
         codes={codesWithDocs}
         readOnly={isReadOnly}
+      />
+
+      {/* Footer: volver al pedido */}
+      <BackToPedidoButton
+        isComplete={isComplete}
+        customMessage={
+          isReadOnly
+            ? "Ya enviaste el pedido. Estás viendo lo que cargaste."
+            : customMessage
+        }
       />
     </div>
   )
