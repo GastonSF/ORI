@@ -127,7 +127,9 @@ export async function prepareCodeDocUploadAction(input: {
   const slotLabel = SLOT_LABELS[input.slot]
   const docType = SLOT_TO_DOC_TYPE[input.slot]
   const safeFileName = input.file_name.replace(/[^a-zA-Z0-9._-]/g, "_")
-  const filePath = `applications/${app.id}/codes/${input.code_id}/${input.slot}_${Date.now()}_${safeFileName}`
+  // IMPORTANTE: el path tiene que empezar con clients/{client_id}/...
+  // para cumplir con la RLS policy del bucket "documents"
+  const filePath = `clients/${client.id}/applications/${app.id}/codes/${input.code_id}/${input.slot}_${Date.now()}_${safeFileName}`
 
   // Crear la fila en documents (status uploaded - el archivo va a llegar enseguida)
   const { data: doc, error: docErr } = await supabase
