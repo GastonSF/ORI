@@ -21,6 +21,7 @@ import { LegajoDictamenForm } from "@/components/staff/legajo-dictamen-form"
 import { LegajoAssignmentButton } from "@/components/staff/legajo-assignment-button"
 import { LegajoAdvanceButton } from "@/components/staff/legajo-advance-button"
 import { LegajoCobranzaPanel } from "@/components/staff/legajo-cobranza-panel"
+import { LegajoApproveInfoButton } from "@/components/staff/legajo-approve-info-button"
 
 type Params = { id: string }
 
@@ -353,9 +354,31 @@ export default async function LegajoDetallePage({
     ? DOCS_COUNT_BY_LINE[app.funding_line]
     : 0
 
+  // ============================================================
+  // ¿Mostrar el botón "Aprobar pedido de información"?
+  // ============================================================
+  // Condiciones:
+  //  - Usuario puede actuar (officer asignado o admin)
+  //  - Status = additional_docs_review (cliente ya envió formalmente)
+  //  - Línea es FGPlus (solo FGPlus tiene este flujo)
+  const showApproveInfoButton =
+    canActOnDocs &&
+    app.status === "additional_docs_review" &&
+    app.funding_line === "fgplus"
+
+  // Resumen del árbol para el modal de aprobación
+  const cobranzaCanales = cobranzaData?.channels.length ?? 0
+  const cobranzaCodigosTotal = cobranzaData?.codes.length ?? 0
+  const cobranzaCodigosExcluidos =
+    cobranzaData?.codes.filter((c) => c.is_excluded).length ?? 0
+  const cobranzaCodigosCompletos = cobranzaCodigosTotal - cobranzaCodigosExcluidos
+
   // ¿Hay algo que mostrar en la columna derecha?
   const hasRightColumn =
-    showDictamenForm || history.length > 0 || showAdvanceButton
+    showDictamenForm ||
+    history.length > 0 ||
+    showAdvanceButton ||
+    showApproveInfoButton
 
   return (
     <div className="space-y-5">
@@ -449,13 +472,25 @@ export default async function LegajoDetallePage({
 
         {hasRightColumn ? (
           <div className="lg:col-span-3 space-y-4">
-            {/* Botón de avance a docs de línea (arriba de todo, es la acción principal) */}
+            {/* Botón de avance a docs de línea (acción principal cuando aplica) */}
             {showAdvanceButton && app.funding_line ? (
               <LegajoAdvanceButton
                 applicationId={app.id}
                 applicationNumber={app.application_number}
                 fundingLine={app.funding_line}
                 previewDocsCount={previewDocsCount}
+              />
+            ) : null}
+
+            {/* Botón de aprobación del pedido de información (acción principal cuando aplica) */}
+            {showApproveInfoButton ? (
+              <LegajoApproveInfoButton
+                applicationId={app.id}
+                applicationNumber={app.application_number}
+                cobranzaCanales={cobranzaCanales}
+                cobranzaCodigosCompletos={cobranzaCodigosCompletos}
+                cobranzaCodigosExcluidos={cobranzaCodigosExcluidos}
+                cobranzaCodigosTotal={cobranzaCodigosTotal}
               />
             ) : null}
 
