@@ -372,8 +372,16 @@ export default async function LegajoDetallePage({
     app.status === "in_risk_analysis" || app.status === "observed"
   const isAnalystOrAdmin =
     profile.role === "analyst" || profile.role === "admin"
+
+  // ============================================================
+  // ¿Mostrar la card del dictamen?
+  // - El analista/admin lo ve siempre que sea dictaminable o ya exista
+  // - El oficial SOLO lo ve cuando ya hay dictamen emitido (read-only)
+  //   para poder consultar la decisión y comunicarla al cliente
+  // ============================================================
   const showDictamenForm =
-    isAnalystOrAdmin && (isDictaminable || !!existingDictamen)
+    (isAnalystOrAdmin && (isDictaminable || !!existingDictamen)) ||
+    (profile.role === "officer" && !!existingDictamen)
 
   const canActOnDocs =
     profile.role === "admin" ||
@@ -407,8 +415,7 @@ export default async function LegajoDetallePage({
 
   // ============================================================
   // ¿Mostrar el banner del dictamen arriba del legajo?
-  // Solo para el oficial: el analista ya cargó el dictamen y no
-  // necesita destacarlo otra vez.
+  // Solo para el oficial: el analista ya cargó el dictamen
   // ============================================================
   const showDictamenBanner =
     profile.role === "officer" && !!existingDictamen
