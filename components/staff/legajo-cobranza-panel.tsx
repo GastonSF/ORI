@@ -46,10 +46,6 @@ type Props = {
   channels: CollectionChannel[]
   debitoTipos: DebitoTipo[]
   codes: CodeData[]
-  /**
-   * Si es null, el cliente todavía no envió el pedido.
-   * Si tiene fecha, ya lo envió (panel está "cerrado" para el cliente).
-   */
   completedAt: string | null
 }
 
@@ -59,19 +55,6 @@ const CHANNEL_ICONS: { [K in CollectionChannel]: typeof CreditCard } = {
   pago_voluntario: HandCoins,
 }
 
-/**
- * Panel read-only para el oficial: muestra el árbol de cobranza
- * que respondió el cliente.
- *
- * Renderiza:
- *   - Header con el badge de estado (en progreso / enviado)
- *   - Canales seleccionados con iconos
- *   - Tipos de débito (si aplica)
- *   - Lista de códigos con su titularidad, cedentes y archivos descargables
- *
- * Es server-friendly (no usa useState, useEffect, etc): solo render.
- * Los archivos se muestran con link al signed_url (descarga directa).
- */
 export function LegajoCobranzaPanel({
   applicationNumber,
   channels,
@@ -82,13 +65,10 @@ export function LegajoCobranzaPanel({
   const includesDescuento = channels.includes("descuento_haberes")
   const includesDebito = channels.includes("debito_cuenta")
   const isSubmitted = !!completedAt
-
-  // Si no hay canales y no hay códigos → cliente no completó nada
   const isEmpty = channels.length === 0 && codes.length === 0
 
   return (
     <section className="rounded-xl border border-gray-200 bg-white overflow-hidden">
-      {/* Header */}
       <div className="bg-gray-50 border-b border-gray-200 px-5 py-4 flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-lg bg-[#eff3ff] grid place-items-center shrink-0">
@@ -120,7 +100,6 @@ export function LegajoCobranzaPanel({
       </div>
 
       <div className="p-5 space-y-5">
-        {/* Empty state */}
         {isEmpty && (
           <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6 text-center">
             <p className="text-sm text-gray-600">
@@ -129,7 +108,6 @@ export function LegajoCobranzaPanel({
           </div>
         )}
 
-        {/* Sección 1: Canales */}
         {!isEmpty && (
           <div>
             <h3 className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-2">
@@ -156,7 +134,6 @@ export function LegajoCobranzaPanel({
           </div>
         )}
 
-        {/* Sección 2: Tipos de débito (si aplica) */}
         {includesDebito && (
           <div>
             <h3 className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-2">
@@ -182,7 +159,6 @@ export function LegajoCobranzaPanel({
           </div>
         )}
 
-        {/* Sección 3: Códigos (si aplica) */}
         {includesDescuento && (
           <div>
             <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
@@ -216,10 +192,6 @@ export function LegajoCobranzaPanel({
   )
 }
 
-// ============================================================
-// Subcomponente: una fila de código (read-only)
-// ============================================================
-
 function CollectionCodeRow({ index, code }: { index: number; code: CodeData }) {
   const isComplete = !code.is_excluded && checkComplete(code)
 
@@ -233,7 +205,6 @@ function CollectionCodeRow({ index, code }: { index: number; code: CodeData }) {
           : "border-amber-200 bg-amber-50/40"
       }`}
     >
-      {/* Header de la fila */}
       <div className="flex items-start justify-between gap-3 mb-3 flex-wrap">
         <div className="flex items-center gap-2 min-w-0 flex-1">
           {code.is_excluded ? (
@@ -269,7 +240,6 @@ function CollectionCodeRow({ index, code }: { index: number; code: CodeData }) {
         </div>
       </div>
 
-      {/* Si está excluido, mostrar la razón y nada más */}
       {code.is_excluded ? (
         <div className="text-xs text-gray-700 bg-white rounded-md border border-gray-200 p-3">
           <p className="font-medium text-gray-600 mb-1">
@@ -281,7 +251,6 @@ function CollectionCodeRow({ index, code }: { index: number; code: CodeData }) {
         </div>
       ) : (
         <>
-          {/* Cadena de cesión (si aplica) */}
           {code.ownership !== "propio" && (
             <div className="mb-3">
               <p className="text-[10px] text-gray-600 uppercase tracking-wide font-semibold mb-1">
@@ -308,7 +277,6 @@ function CollectionCodeRow({ index, code }: { index: number; code: CodeData }) {
             </div>
           )}
 
-          {/* Documentos del código */}
           <div>
             <p className="text-[10px] text-gray-600 uppercase tracking-wide font-semibold mb-2">
               Documentación
@@ -349,10 +317,6 @@ function CollectionCodeRow({ index, code }: { index: number; code: CodeData }) {
   )
 }
 
-// ============================================================
-// Subcomponente: una fila de documento descargable
-// ============================================================
-
 function DocSlotRow({
   label,
   doc,
@@ -375,6 +339,9 @@ function DocSlotRow({
       ? (doc.file_size_bytes / (1024 * 1024)).toFixed(2)
       : null
 
+  const linkClassName =
+    "inline-flex items-center gap-1 px-2 py-1 rounded-md bg-[#1b38e8] text-white text-[10px] font-semibold hover:bg-[#1730c4] shrink-0"
+
   return (
     <div className="flex items-center gap-2 text-xs bg-white rounded border border-gray-200 px-2.5 py-1.5">
       <FileText className="h-3 w-3 shrink-0 text-[#1b38e8]" />
@@ -386,12 +353,7 @@ function DocSlotRow({
         </p>
       </div>
       {doc.signed_url ? (
-        
-          href={doc.signed_url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-[#1b38e8] text-white text-[10px] font-semibold hover:bg-[#1730c4] shrink-0"
-        >
+        <a href={doc.signed_url} target="_blank" rel="noopener noreferrer" className={linkClassName}>
           <ExternalLink className="h-3 w-3" />
           Ver
         </a>
@@ -404,9 +366,6 @@ function DocSlotRow({
   )
 }
 
-// ============================================================
-// Helper: ¿está completo?
-// ============================================================
 function checkComplete(c: CodeData): boolean {
   if (c.is_excluded) return true
   if (!c.code_name?.trim()) return false
