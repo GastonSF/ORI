@@ -20,7 +20,6 @@ import {
 
 type Props = {
   applicationId: string
-  // Si ya hay un comprobante subido, se pasa acá para mostrarlo
   existingDoc: {
     id: string
     file_name: string
@@ -28,32 +27,12 @@ type Props = {
     mime_type: string | null
     signed_url: string | null
   } | null
-  // Si el dictamen ya existe, los cambios se guardan automáticamente.
-  // Si no existe (form en blanco), el doc_id se reporta al padre via callback.
   onUploaded?: (docId: string | null) => void
   readOnly?: boolean
 }
 
 const MAX_SIZE_MB = 10
 
-/**
- * Componente para subir el comprobante del comité de riesgo
- * (típicamente un screenshot del mail).
- *
- * Diseño:
- *   - Caja gris clarita con icono de mail + label arriba
- *   - Si no hay archivo: botón grande "Subir comprobante"
- *   - Si hay archivo:
- *     - Si es imagen → preview thumbnail
- *     - Si es PDF/otro → ícono + nombre
- *     - Botón "Reemplazar" + "Eliminar"
- *   - Etiqueta sutil "Opcional" cerca del label
- *
- * Comportamiento:
- *   - Permite subir antes o después de guardar el dictamen
- *   - Si el dictamen ya existe → linkea automáticamente
- *   - Si no existe → reporta al padre vía onUploaded(docId)
- */
 export function ComiteEvidenceUpload({
   applicationId,
   existingDoc,
@@ -66,7 +45,6 @@ export function ComiteEvidenceUpload({
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Para el caso "subido pero todavía no linkeado al dictamen"
   const [pendingDoc, setPendingDoc] = useState<{
     id: string
     file_name: string
@@ -74,7 +52,6 @@ export function ComiteEvidenceUpload({
     mime_type: string
   } | null>(null)
 
-  // Resync si cambia el existingDoc (después de router.refresh)
   useEffect(() => {
     if (existingDoc) {
       setPendingDoc(null)
@@ -89,7 +66,7 @@ export function ComiteEvidenceUpload({
           file_name: pendingDoc.file_name,
           file_size_bytes: pendingDoc.file_size_bytes,
           mime_type: pendingDoc.mime_type,
-          signed_url: null, // todavía no se generó signed url
+          signed_url: null,
         }
       : null)
 
@@ -109,7 +86,6 @@ export function ComiteEvidenceUpload({
     setUploading(true)
 
     try {
-      // 1. Preparar
       const prep = await prepareComiteEvidenceUploadAction({
         application_id: applicationId,
         file_name: file.name,
@@ -123,7 +99,6 @@ export function ComiteEvidenceUpload({
         return
       }
 
-      // 2. Subir a Storage
       const uploadRes = await fetch(prep.data.upload_url, {
         method: "PUT",
         headers: { "Content-Type": file.type || "application/octet-stream" },
@@ -137,7 +112,6 @@ export function ComiteEvidenceUpload({
         return
       }
 
-      // 3. Confirmar (linkea al dictamen si existe)
       const confirm = await confirmComiteEvidenceUploadAction({
         application_id: applicationId,
         document_id: prep.data.document_id,
@@ -150,10 +124,8 @@ export function ComiteEvidenceUpload({
         return
       }
 
-      // Reportar al padre el doc_id (para que el form lo incluya al guardar)
       onUploaded?.(prep.data.document_id)
 
-      // Si no hay dictamen todavía, guardamos pending localmente
       if (!existingDoc) {
         setPendingDoc({
           id: prep.data.document_id,
@@ -197,11 +169,18 @@ export function ComiteEvidenceUpload({
     router.refresh()
   }
 
-  const isImage = currentDoc?.mime_type?.startsWith("image/")
+  const isImage = currentDoc?.mime_type?.startsWith("image/") ?? false
   const sizeMb =
     currentDoc?.file_size_bytes != null
       ? (currentDoc.file_size_bytes / (1024 * 1024)).toFixed(2)
       : null
+
+  // Variables auxiliares para evitar el bug del editor de GitHub con JSX multilínea
+  const thumbnailLinkClass = "block"
+  const thumbnailImgClass =
+    "h-14 w-14 object-cover rounded border border-gray-200 hover:opacity-80"
+  const viewBtnClass =
+    "inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-[#1b38e8] text-white hover:bg-[#1730c4]"
 
   return (
     <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
@@ -241,7 +220,6 @@ export function ComiteEvidenceUpload({
         </button>
       )}
 
-      {/* Sin archivo en read-only */}
       {!currentDoc && readOnly && (
         <p className="text-xs text-gray-500 italic text-center py-2">
           No se subió comprobante.
@@ -252,20 +230,11 @@ export function ComiteEvidenceUpload({
       {currentDoc && (
         <div className="rounded-md border border-gray-200 bg-white p-2.5">
           <div className="flex items-start gap-3">
-            {/* Thumbnail si es imagen, ícono si es PDF/otro */}
+            {/* Thumbnail / icono */}
             <div className="shrink-0">
               {isImage && currentDoc.signed_url ? (
-                
-                  href={currentDoc.signed_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block"
-                >
-                  <img
-                    src={currentDoc.signed_url}
-                    alt="Comprobante del comité"
-                    className="h-14 w-14 object-cover rounded border border-gray-200 hover:opacity-80"
-                  />
+                <a href={currentDoc.signed_url} target="_blank" rel="noopener noreferrer" className={thumbnailLinkClass}>
+                  <img src={currentDoc.signed_url} alt="Comprobante del comité" className={thumbnailImgClass} />
                 </a>
               ) : isImage ? (
                 <div className="h-14 w-14 rounded border border-gray-200 bg-gray-100 grid place-items-center">
@@ -287,16 +256,10 @@ export function ComiteEvidenceUpload({
                 <p className="text-[10px] text-gray-500 mt-0.5">{sizeMb} MB</p>
               )}
 
-              {/* Botones */}
               {!readOnly && (
                 <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
                   {currentDoc.signed_url && (
-                    
-                      href={currentDoc.signed_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-[#1b38e8] text-white hover:bg-[#1730c4]"
-                    >
+                    <a href={currentDoc.signed_url} target="_blank" rel="noopener noreferrer" className={viewBtnClass}>
                       <ExternalLink className="h-2.5 w-2.5" />
                       Ver
                     </a>
@@ -330,12 +293,7 @@ export function ComiteEvidenceUpload({
               )}
 
               {readOnly && currentDoc.signed_url && (
-                
-                  href={currentDoc.signed_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-[#1b38e8] text-white hover:bg-[#1730c4]"
-                >
+                <a href={currentDoc.signed_url} target="_blank" rel="noopener noreferrer" className={`mt-1.5 ${viewBtnClass}`}>
                   <ExternalLink className="h-2.5 w-2.5" />
                   Ver
                 </a>
