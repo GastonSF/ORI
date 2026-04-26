@@ -12,13 +12,19 @@ import {
   type FundingLine,
   type DictamenDecision,
   type UserRole,
+  type CollectionChannel,
+  type DebitoTipo,
+  type CollectionCodeOwnership,
 } from "@/lib/constants/roles"
 import { LegajoDocumentosPanel } from "@/components/staff/legajo-documentos-panel"
 import { LegajoDictamenForm } from "@/components/staff/legajo-dictamen-form"
 import { LegajoAssignmentButton } from "@/components/staff/legajo-assignment-button"
 import { LegajoAdvanceButton } from "@/components/staff/legajo-advance-button"
+import { LegajoCobranzaPanel } from "@/components/staff/legajo-cobranza-panel"
 
 type Params = { id: string }
+
+const STORAGE_BUCKET = "documents"
 
 // Estados "de análisis inicial" donde tiene sentido mostrar el botón de avance
 const INITIAL_ANALYSIS_STATUSES: ApplicationStatus[] = [
@@ -26,6 +32,18 @@ const INITIAL_ANALYSIS_STATUSES: ApplicationStatus[] = [
   "pending_authorization",
   "authorized",
   "docs_in_review",
+]
+
+// Estados donde tiene sentido mostrar el panel del árbol de cobranza FGPlus.
+// Desde additional_docs_pending el oficial puede ir viendo lo que sube el
+// cliente en tiempo real. Una vez en review, el panel sigue visible.
+const COBRANZA_PANEL_STATUSES: ApplicationStatus[] = [
+  "additional_docs_pending",
+  "additional_docs_review",
+  "in_risk_analysis",
+  "observed",
+  "approved",
+  "rejected_by_analyst",
 ]
 
 // Cuántos docs se piden para cada línea (para el preview del modal)
@@ -183,6 +201,129 @@ export default async function LegajoDetallePage({
     }
   })
 
+  // ============================================================
+  // Cargar el árbol de cobranza si es FGPlus y está en una fase relevante
+  // ============================================================
+  let cobranzaData: {
+    channels: CollectionChannel[]
+    debitoTipos: DebitoTipo[]
+    completedAt: string | null
+    codes: Array<{
+      id: string
+      code_name: string
+      ownership: CollectionCodeOwnership
+      cedente_nivel_1_name: string | null
+      cedente_nivel_2_name: string | null
+      is_excluded: boolean
+      exclusion_reason: string | null
+      docs: {
+        autorizacion_descuento: { id: string; file_name: string; file_size_bytes: number | null; signed_url: string | null } | null
+        convenio_nivel_1: { id: string; file_name: string; file_size_bytes: number | null; signed_url: string | null } | null
+        convenio_nivel_2: { id: string; file_name: string; file_size_bytes: number | null; signed_url: string | null } | null
+        autorizacion_mutual_original: { id: string; file_name: string; file_size_bytes: number | null; signed_url: string | null } | null
+      }
+    }>
+  } | null = null
+
+  const showCobranzaPanel =
+    app.funding_line === "fgplus" &&
+    COBRANZA_PANEL_STATUSES.includes(app.status)
+
+  if (showCobranzaPanel) {
+    const { data: tree } = await supabase
+      .from("funding_line_responses")
+      .select("channels, debito_tipos, completed_at")
+      .eq("application_id", app.id)
+      .maybeSingle()
+
+    const { data: rawCodes } = await supabase
+      .from("collection_codes")
+      .select(
+        `
+          id,
+          code_name,
+          ownership,
+          cedente_nivel_1_name,
+          cedente_nivel_2_name,
+          is_excluded,
+          exclusion_reason,
+          autorizacion_descuento_doc_id,
+          convenio_nivel_1_doc_id,
+          convenio_nivel_2_doc_id,
+          autorizacion_mutual_original_doc_id,
+          created_at
+        `
+      )
+      .eq("application_id", app.id)
+      .order("created_at", { ascending: true })
+
+    const codes = rawCodes ?? []
+
+    // Recolectar todos los doc_ids para cargarlos en una sola query
+    const allDocIds: string[] = []
+    for (const c of codes) {
+      if (c.autorizacion_descuento_doc_id) allDocIds.push(c.autorizacion_descuento_doc_id)
+      if (c.convenio_nivel_1_doc_id) allDocIds.push(c.convenio_nivel_1_doc_id)
+      if (c.convenio_nivel_2_doc_id) allDocIds.push(c.convenio_nivel_2_doc_id)
+      if (c.autorizacion_mutual_original_doc_id) allDocIds.push(c.autorizacion_mutual_original_doc_id)
+    }
+
+    const docsById = new Map<string, { id: string; file_name: string; file_size_bytes: number | null; signed_url: string | null }>()
+
+    if (allDocIds.length > 0) {
+      const { data: docsData } = await supabase
+        .from("documents")
+        .select("id, file_name, file_size_bytes, file_path")
+        .in("id", allDocIds)
+
+      // Generar signed URLs (válidas por 1 hora) para cada doc
+      for (const d of docsData ?? []) {
+        let signedUrl: string | null = null
+        if (d.file_path) {
+          const { data: signed } = await supabase.storage
+            .from(STORAGE_BUCKET)
+            .createSignedUrl(d.file_path, 3600)
+          signedUrl = signed?.signedUrl ?? null
+        }
+        docsById.set(d.id, {
+          id: d.id,
+          file_name: d.file_name,
+          file_size_bytes: d.file_size_bytes,
+          signed_url: signedUrl,
+        })
+      }
+    }
+
+    cobranzaData = {
+      channels: (tree?.channels ?? []) as CollectionChannel[],
+      debitoTipos: (tree?.debito_tipos ?? []) as DebitoTipo[],
+      completedAt: tree?.completed_at ?? null,
+      codes: codes.map((c) => ({
+        id: c.id,
+        code_name: c.code_name,
+        ownership: c.ownership as CollectionCodeOwnership,
+        cedente_nivel_1_name: c.cedente_nivel_1_name,
+        cedente_nivel_2_name: c.cedente_nivel_2_name,
+        is_excluded: c.is_excluded,
+        exclusion_reason: c.exclusion_reason,
+        docs: {
+          autorizacion_descuento: c.autorizacion_descuento_doc_id
+            ? docsById.get(c.autorizacion_descuento_doc_id) ?? null
+            : null,
+          convenio_nivel_1: c.convenio_nivel_1_doc_id
+            ? docsById.get(c.convenio_nivel_1_doc_id) ?? null
+            : null,
+          convenio_nivel_2: c.convenio_nivel_2_doc_id
+            ? docsById.get(c.convenio_nivel_2_doc_id) ?? null
+            : null,
+          autorizacion_mutual_original: c.autorizacion_mutual_original_doc_id
+            ? docsById.get(c.autorizacion_mutual_original_doc_id) ?? null
+            : null,
+        },
+      })),
+    }
+  }
+
   const isDictaminable =
     app.status === "in_risk_analysis" || app.status === "observed"
   const isAnalystOrAdmin =
@@ -197,13 +338,6 @@ export default async function LegajoDetallePage({
   // ============================================================
   // ¿Mostrar el botón "Pedir docs de línea"?
   // ============================================================
-  // Condiciones:
-  //  - Usuario puede actuar sobre este legajo (officer asignado o admin)
-  //  - Legajo está en análisis inicial
-  //  - Legajo tiene funding_line
-  //  - Hay al menos 1 doc inicial (sino no tiene sentido)
-  //  - TODOS los docs iniciales están aprobados
-  //  - No hay requests de docs adicionales ya creados (no repetir la acción)
   const initialDocs = documents.filter((d) => d.doc_phase === "initial")
   const allInitialDocsApproved =
     initialDocs.length > 0 && initialDocs.every((d) => d.status === "approved")
@@ -220,7 +354,6 @@ export default async function LegajoDetallePage({
     : 0
 
   // ¿Hay algo que mostrar en la columna derecha?
-  // Ahora también cuenta el botón de avance
   const hasRightColumn =
     showDictamenForm || history.length > 0 || showAdvanceButton
 
@@ -290,7 +423,7 @@ export default async function LegajoDetallePage({
 
       {/* Grid principal: adaptativo según si hay columna derecha o no */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        <div className={hasRightColumn ? "lg:col-span-9" : "lg:col-span-12"}>
+        <div className={`${hasRightColumn ? "lg:col-span-9" : "lg:col-span-12"} space-y-4`}>
           <LegajoDocumentosPanel
             documents={documents}
             additionalRequests={additionalRequests}
@@ -301,6 +434,17 @@ export default async function LegajoDetallePage({
             canUploadAsStaff={canActOnDocs}
             canReviewDocs={canActOnDocs}
           />
+
+          {/* Panel de árbol de cobranza (solo FGPlus) */}
+          {showCobranzaPanel && cobranzaData ? (
+            <LegajoCobranzaPanel
+              applicationNumber={app.application_number}
+              channels={cobranzaData.channels}
+              debitoTipos={cobranzaData.debitoTipos}
+              codes={cobranzaData.codes}
+              completedAt={cobranzaData.completedAt}
+            />
+          ) : null}
         </div>
 
         {hasRightColumn ? (
