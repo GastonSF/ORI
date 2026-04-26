@@ -6,6 +6,7 @@ import { CheckCircle2, XCircle, MinusCircle, Loader2, Gavel, Clock, Pencil, User
 import { emitirDictamenAction } from "@/lib/actions/dictamen"
 import { DICTAMEN_DECISION_LABELS, type DictamenDecision, type ApplicationStatus } from "@/lib/constants/roles"
 import { LegajoDictamenEditModal } from "@/components/staff/legajo-dictamen-edit-modal"
+import { ComiteEvidenceUpload } from "@/components/staff/comite-evidence-upload"
 import { createBrowserClient } from "@supabase/ssr"
 
 type ExistingDictamen = {
@@ -24,14 +25,37 @@ type ExistingDictamen = {
   last_edited_by: string | null
 }
 
+type ComiteEvidence = {
+  id: string
+  file_name: string
+  file_size_bytes: number | null
+  mime_type: string | null
+  signed_url: string | null
+}
+
 type Props = {
   applicationId: string
   existingDictamen: ExistingDictamen | null
   applicationStatus: ApplicationStatus
+  // Comprobante del comité ya subido (opcional)
+  existingComiteEvidence?: ComiteEvidence | null
 }
 
-export function LegajoDictamenForm({ applicationId, existingDictamen, applicationStatus }: Props) {
-  if (existingDictamen) return <DictamenEmitidoView dictamen={existingDictamen} />
+export function LegajoDictamenForm({
+  applicationId,
+  existingDictamen,
+  applicationStatus,
+  existingComiteEvidence = null,
+}: Props) {
+  if (existingDictamen) {
+    return (
+      <DictamenEmitidoView
+        dictamen={existingDictamen}
+        applicationId={applicationId}
+        existingComiteEvidence={existingComiteEvidence}
+      />
+    )
+  }
 
   const dictaminable = applicationStatus === "in_risk_analysis" || applicationStatus === "observed"
   if (!dictaminable) {
@@ -46,14 +70,25 @@ export function LegajoDictamenForm({ applicationId, existingDictamen, applicatio
     )
   }
 
-  return <DictamenForm applicationId={applicationId} />
+  return (
+    <DictamenForm
+      applicationId={applicationId}
+      existingComiteEvidence={existingComiteEvidence}
+    />
+  )
 }
 
 // ============================================================
-// FORMULARIO DE EMISIÓN (sin cambios respecto a antes)
+// FORMULARIO DE EMISIÓN
 // ============================================================
 
-function DictamenForm({ applicationId }: { applicationId: string }) {
+function DictamenForm({
+  applicationId,
+  existingComiteEvidence,
+}: {
+  applicationId: string
+  existingComiteEvidence: ComiteEvidence | null
+}) {
   const [decision, setDecision] = useState<DictamenDecision | null>(null)
   const [approvedAmount, setApprovedAmount] = useState("")
   const [termMonths, setTermMonths] = useState("")
@@ -140,6 +175,14 @@ function DictamenForm({ applicationId }: { applicationId: string }) {
           <p className="mt-1 text-[10px] text-gray-400">{justification.trim().length} / 20 caracteres mínimos</p>
         </div>
 
+        {/* Comprobante del comité (opcional) */}
+        <div className="pt-3 border-t border-gray-100">
+          <ComiteEvidenceUpload
+            applicationId={applicationId}
+            existingDoc={existingComiteEvidence}
+          />
+        </div>
+
         <button type="button" onClick={onSubmit} disabled={isSubmitting || !decision} className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-md bg-[#1b38e8] text-white text-sm font-medium hover:bg-[#1730c4] disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
           {isSubmitting ? <><Loader2 className="h-4 w-4 animate-spin" />Emitiendo...</> : <><Gavel className="h-4 w-4" />Emitir dictamen</>}
         </button>
@@ -153,7 +196,15 @@ function DictamenForm({ applicationId }: { applicationId: string }) {
 // VISTA READ-ONLY (con botón Editar integrado)
 // ============================================================
 
-function DictamenEmitidoView({ dictamen }: { dictamen: ExistingDictamen }) {
+function DictamenEmitidoView({
+  dictamen,
+  applicationId,
+  existingComiteEvidence,
+}: {
+  dictamen: ExistingDictamen
+  applicationId: string
+  existingComiteEvidence: ComiteEvidence | null
+}) {
   const meta = getDecisionMeta(dictamen.decision)
   const Icon = meta.Icon
 
@@ -251,6 +302,15 @@ function DictamenEmitidoView({ dictamen }: { dictamen: ExistingDictamen }) {
           <ReadField label="Fundamento" value={dictamen.justification} block />
         </dl>
 
+        {/* Comprobante del comité */}
+        <div className="px-4 pb-4">
+          <ComiteEvidenceUpload
+            applicationId={applicationId}
+            existingDoc={existingComiteEvidence}
+            readOnly={!canEdit}
+          />
+        </div>
+
         {/* Firma del autor */}
         <div className="px-4 py-2.5 bg-gray-50 border-t border-gray-100">
           <div className="flex items-center gap-1.5 text-[11px] text-gray-500">
@@ -275,7 +335,7 @@ function DictamenEmitidoView({ dictamen }: { dictamen: ExistingDictamen }) {
 }
 
 // ============================================================
-// SUB-COMPONENTES (sin cambios respecto a antes)
+// SUB-COMPONENTES (sin cambios)
 // ============================================================
 
 function DecisionOption({ label, description, icon, selected, onSelect, colorClass }: { decision: DictamenDecision; label: string; description: string; icon: React.ReactNode; selected: boolean; onSelect: () => void; colorClass: "emerald" | "amber" | "red" }) {
