@@ -320,7 +320,7 @@ export function LegajoDocumentosPanel({
                   </div>
                 </div>
 
-                {/* Barra de revisión (aprobar/rechazar/revertir) */}
+                {/* Barra de revisión */}
                 {canReviewDocs ? (
                   <ReviewBar
                     status={selected.status}
@@ -342,7 +342,7 @@ export function LegajoDocumentosPanel({
                   </div>
                 ) : null}
 
-                {/* Preview del archivo: contenedor que ocupa toda la altura disponible */}
+                {/* Preview del archivo */}
                 <div className="flex-1 bg-gray-100 relative" style={{ minHeight: "500px" }}>
                   {loading ? (
                     <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-gray-500">
@@ -404,7 +404,7 @@ export function LegajoDocumentosPanel({
 }
 
 // ============================================================
-// BARRA DE REVISIÓN (sin cambios)
+// BARRA DE REVISIÓN
 // ============================================================
 
 function ReviewBar({
@@ -540,21 +540,19 @@ function DocumentRenderer({ preview }: { preview: PreviewState }) {
     preview.mimeType === "application/pdf" ||
     /\.pdf$/i.test(preview.fileName)
 
-  // Imagen: contenedor centrado con scroll si es muy grande
+  // ClassName extraída para que el JSX del <a> sea de una sola línea
+  // (evita el bug del editor de GitHub que come tags multilínea)
+  const downloadBtnClass = "inline-flex items-center gap-1.5 px-4 py-2 rounded-md bg-[#1b38e8] text-white text-sm font-medium hover:bg-[#1730c4] transition-colors"
+
   if (isImage) {
     return (
       <div className="absolute inset-0 overflow-auto flex items-center justify-center p-4">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={preview.url}
-          alt={preview.fileName}
-          className="max-w-full max-h-full object-contain"
-        />
+        <img src={preview.url} alt={preview.fileName} className="max-w-full max-h-full object-contain" />
       </div>
     )
   }
 
-  // PDF: iframe ocupa el 100% del contenedor (que tiene min-height 500px del padre)
   if (isPdf) {
     return (
       <iframe
@@ -565,22 +563,14 @@ function DocumentRenderer({ preview }: { preview: PreviewState }) {
     )
   }
 
-  // Otros (Excel, Word, etc): no se previsualizan inline, mostramos card de descarga
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center">
       <div className="h-16 w-16 rounded-lg bg-white border border-gray-200 grid place-items-center mb-3">
         <FileIcon className="h-8 w-8 text-[#1b38e8]" />
       </div>
       <p className="text-sm font-medium text-gray-900 mb-1">{preview.fileName}</p>
-      <p className="text-xs text-gray-500 mb-4">
-        Este tipo de archivo no se puede previsualizar acá.
-      </p>
-      
-        href={preview.url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-md bg-[#1b38e8] text-white text-sm font-medium hover:bg-[#1730c4] transition-colors"
-      >
+      <p className="text-xs text-gray-500 mb-4">Este tipo de archivo no se puede previsualizar acá.</p>
+      <a href={preview.url} target="_blank" rel="noopener noreferrer" className={downloadBtnClass}>
         <ExternalLink className="h-4 w-4" />
         Abrir en nueva pestaña
       </a>
