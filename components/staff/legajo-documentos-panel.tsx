@@ -292,7 +292,7 @@ export function LegajoDocumentosPanel({
         </div>
 
         <div className="col-span-12 md:col-span-8 lg:col-span-9">
-          <div className="rounded-xl border border-gray-200 bg-white overflow-hidden flex flex-col" style={{ minHeight: "600px" }}>
+          <div className="rounded-xl border border-gray-200 bg-white overflow-hidden flex flex-col" style={{ minHeight: "700px" }}>
             {selected ? (
               <>
                 {/* Toolbar principal del preview */}
@@ -333,7 +333,6 @@ export function LegajoDocumentosPanel({
                     onRevert={handleRevert}
                   />
                 ) : selected.status === "rejected" && selected.reviewNotes ? (
-                  // Si no puede actuar pero el doc está rechazado, igual mostramos el motivo
                   <div className="px-4 py-2.5 border-b border-gray-100 bg-red-50/50 flex items-start gap-2">
                     <MessageCircle className="h-3.5 w-3.5 text-red-600 shrink-0 mt-0.5" />
                     <div className="flex-1 min-w-0 text-[11px] text-red-800">
@@ -343,15 +342,15 @@ export function LegajoDocumentosPanel({
                   </div>
                 ) : null}
 
-                {/* Preview del archivo */}
-                <div className="flex-1 bg-gray-100 flex items-center justify-center overflow-auto">
+                {/* Preview del archivo: contenedor que ocupa toda la altura disponible */}
+                <div className="flex-1 bg-gray-100 relative" style={{ minHeight: "500px" }}>
                   {loading ? (
-                    <div className="flex flex-col items-center gap-2 text-gray-500">
+                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-gray-500">
                       <Loader2 className="h-6 w-6 animate-spin" />
                       <p className="text-xs">Cargando documento...</p>
                     </div>
                   ) : error ? (
-                    <div className="flex flex-col items-center gap-2 text-red-600 px-6 text-center">
+                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-red-600 px-6 text-center">
                       <AlertCircle className="h-6 w-6" />
                       <p className="text-xs">{error}</p>
                       <button type="button" onClick={() => { toast.dismiss(); setError(null); setSelectedIdx((i) => i) }} className="text-xs text-[#1b38e8] hover:underline">Reintentar</button>
@@ -405,7 +404,7 @@ export function LegajoDocumentosPanel({
 }
 
 // ============================================================
-// BARRA DE REVISIÓN (aprobar/rechazar/revertir según estado)
+// BARRA DE REVISIÓN (sin cambios)
 // ============================================================
 
 function ReviewBar({
@@ -427,38 +426,20 @@ function ReviewBar({
   onReject: () => void
   onRevert: () => void
 }) {
-  // pending: el cliente todavía no subió nada, no hay botones
   if (status === "pending") {
     return null
   }
 
-  // uploaded: botones de aprobar/rechazar
   if (status === "uploaded") {
     return (
       <div className="px-4 py-2 border-b border-gray-100 bg-white flex items-center justify-between gap-3">
-        <p className="text-[11px] text-gray-500">
-          Pendiente de revisión
-        </p>
+        <p className="text-[11px] text-gray-500">Pendiente de revisión</p>
         <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={onApprove}
-            disabled={isActing}
-            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            {isActing ? (
-              <Loader2 className="h-3 w-3 animate-spin" />
-            ) : (
-              <ThumbsUp className="h-3 w-3" />
-            )}
+          <button type="button" onClick={onApprove} disabled={isActing} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+            {isActing ? <Loader2 className="h-3 w-3 animate-spin" /> : <ThumbsUp className="h-3 w-3" />}
             Aprobar
           </button>
-          <button
-            type="button"
-            onClick={onReject}
-            disabled={isActing}
-            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-white border border-red-300 text-red-700 text-xs font-medium hover:bg-red-50 disabled:opacity-50 transition-colors"
-          >
+          <button type="button" onClick={onReject} disabled={isActing} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-white border border-red-300 text-red-700 text-xs font-medium hover:bg-red-50 disabled:opacity-50 transition-colors">
             <ThumbsDown className="h-3 w-3" />
             Rechazar
           </button>
@@ -467,7 +448,6 @@ function ReviewBar({
     )
   }
 
-  // approved: chip verde + opción de revertir
   if (status === "approved") {
     return (
       <div className="px-4 py-2 border-b border-gray-100 bg-emerald-50/60 flex items-center justify-between gap-3">
@@ -477,37 +457,19 @@ function ReviewBar({
             <p className="text-[11px] font-medium text-emerald-800">
               Aprobado
               {reviewedByName ? <span className="font-normal"> · {reviewedByName}</span> : null}
-              {reviewedAt ? (
-                <span className="font-normal text-emerald-700">
-                  {" · "}
-                  {formatDate(reviewedAt)}
-                </span>
-              ) : null}
+              {reviewedAt ? <span className="font-normal text-emerald-700">{" · "}{formatDate(reviewedAt)}</span> : null}
             </p>
-            {reviewNotes ? (
-              <p className="text-[11px] text-emerald-700 mt-0.5 italic">{reviewNotes}</p>
-            ) : null}
+            {reviewNotes ? <p className="text-[11px] text-emerald-700 mt-0.5 italic">{reviewNotes}</p> : null}
           </div>
         </div>
-        <button
-          type="button"
-          onClick={onRevert}
-          disabled={isActing}
-          title="Revertir aprobación"
-          className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-white/50 border border-emerald-200 text-emerald-700 text-[10px] font-medium hover:bg-white disabled:opacity-50 transition-colors shrink-0"
-        >
-          {isActing ? (
-            <Loader2 className="h-2.5 w-2.5 animate-spin" />
-          ) : (
-            <RotateCcw className="h-2.5 w-2.5" />
-          )}
+        <button type="button" onClick={onRevert} disabled={isActing} title="Revertir aprobación" className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-white/50 border border-emerald-200 text-emerald-700 text-[10px] font-medium hover:bg-white disabled:opacity-50 transition-colors shrink-0">
+          {isActing ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <RotateCcw className="h-2.5 w-2.5" />}
           Revertir
         </button>
       </div>
     )
   }
 
-  // rejected: chip rojo con motivo + opción de revertir
   return (
     <div className="px-4 py-2 border-b border-gray-100 bg-red-50/60 flex items-start justify-between gap-3">
       <div className="flex items-start gap-2 min-w-0 flex-1">
@@ -516,33 +478,13 @@ function ReviewBar({
           <p className="text-[11px] font-medium text-red-800">
             Rechazado
             {reviewedByName ? <span className="font-normal"> · {reviewedByName}</span> : null}
-            {reviewedAt ? (
-              <span className="font-normal text-red-700">
-                {" · "}
-                {formatDate(reviewedAt)}
-              </span>
-            ) : null}
+            {reviewedAt ? <span className="font-normal text-red-700">{" · "}{formatDate(reviewedAt)}</span> : null}
           </p>
-          {reviewNotes ? (
-            <p className="text-[11px] text-red-700 mt-0.5">
-              <span className="font-medium">Motivo: </span>
-              {reviewNotes}
-            </p>
-          ) : null}
+          {reviewNotes ? <p className="text-[11px] text-red-700 mt-0.5"><span className="font-medium">Motivo: </span>{reviewNotes}</p> : null}
         </div>
       </div>
-      <button
-        type="button"
-        onClick={onRevert}
-        disabled={isActing}
-        title="Revertir rechazo"
-        className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-white/50 border border-red-200 text-red-700 text-[10px] font-medium hover:bg-white disabled:opacity-50 transition-colors shrink-0"
-      >
-        {isActing ? (
-          <Loader2 className="h-2.5 w-2.5 animate-spin" />
-        ) : (
-          <RotateCcw className="h-2.5 w-2.5" />
-        )}
+      <button type="button" onClick={onRevert} disabled={isActing} title="Revertir rechazo" className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-white/50 border border-red-200 text-red-700 text-[10px] font-medium hover:bg-white disabled:opacity-50 transition-colors shrink-0">
+        {isActing ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <RotateCcw className="h-2.5 w-2.5" />}
         Revertir
       </button>
     </div>
@@ -586,13 +528,64 @@ function DocListItem({ item, selected, onSelect }: { item: DocItem; selected: bo
   )
 }
 
+// ============================================================
+// RENDERER del documento — diferenciamos imagen / PDF / otro
+// ============================================================
 function DocumentRenderer({ preview }: { preview: PreviewState }) {
-  const isImage = (preview.mimeType && preview.mimeType.startsWith("image/")) || /\.(jpe?g|png|webp|gif)$/i.test(preview.fileName)
+  const isImage =
+    (preview.mimeType && preview.mimeType.startsWith("image/")) ||
+    /\.(jpe?g|png|webp|gif)$/i.test(preview.fileName)
+
+  const isPdf =
+    preview.mimeType === "application/pdf" ||
+    /\.pdf$/i.test(preview.fileName)
+
+  // Imagen: contenedor centrado con scroll si es muy grande
   if (isImage) {
-    // eslint-disable-next-line @next/next/no-img-element
-    return <img src={preview.url} alt={preview.fileName} className="max-w-full max-h-full object-contain" />
+    return (
+      <div className="absolute inset-0 overflow-auto flex items-center justify-center p-4">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={preview.url}
+          alt={preview.fileName}
+          className="max-w-full max-h-full object-contain"
+        />
+      </div>
+    )
   }
-  return <iframe src={preview.url} className="w-full h-full bg-white" title={preview.fileName} />
+
+  // PDF: iframe ocupa el 100% del contenedor (que tiene min-height 500px del padre)
+  if (isPdf) {
+    return (
+      <iframe
+        src={preview.url}
+        className="absolute inset-0 w-full h-full bg-white border-0"
+        title={preview.fileName}
+      />
+    )
+  }
+
+  // Otros (Excel, Word, etc): no se previsualizan inline, mostramos card de descarga
+  return (
+    <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center">
+      <div className="h-16 w-16 rounded-lg bg-white border border-gray-200 grid place-items-center mb-3">
+        <FileIcon className="h-8 w-8 text-[#1b38e8]" />
+      </div>
+      <p className="text-sm font-medium text-gray-900 mb-1">{preview.fileName}</p>
+      <p className="text-xs text-gray-500 mb-4">
+        Este tipo de archivo no se puede previsualizar acá.
+      </p>
+      
+        href={preview.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-md bg-[#1b38e8] text-white text-sm font-medium hover:bg-[#1730c4] transition-colors"
+      >
+        <ExternalLink className="h-4 w-4" />
+        Abrir en nueva pestaña
+      </a>
+    </div>
+  )
 }
 
 function getStatusIcon(status: "pending" | "uploaded" | "approved" | "rejected") {
