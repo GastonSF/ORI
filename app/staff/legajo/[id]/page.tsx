@@ -22,12 +22,12 @@ import { LegajoAssignmentButton } from "@/components/staff/legajo-assignment-but
 import { LegajoAdvanceButton } from "@/components/staff/legajo-advance-button"
 import { LegajoCobranzaPanel } from "@/components/staff/legajo-cobranza-panel"
 import { LegajoApproveInfoButton } from "@/components/staff/legajo-approve-info-button"
+import { LegajoDictamenBanner } from "@/components/staff/legajo-dictamen-banner"
 
 type Params = { id: string }
 
 const STORAGE_BUCKET = "documents"
 
-// Estados "de análisis inicial" donde tiene sentido mostrar el botón de avance
 const INITIAL_ANALYSIS_STATUSES: ApplicationStatus[] = [
   "submitted",
   "pending_authorization",
@@ -35,9 +35,6 @@ const INITIAL_ANALYSIS_STATUSES: ApplicationStatus[] = [
   "docs_in_review",
 ]
 
-// Estados donde tiene sentido mostrar el panel del árbol de cobranza FGPlus.
-// Desde additional_docs_pending el oficial puede ir viendo lo que sube el
-// cliente en tiempo real. Una vez en review, el panel sigue visible.
 const COBRANZA_PANEL_STATUSES: ApplicationStatus[] = [
   "additional_docs_pending",
   "additional_docs_review",
@@ -47,7 +44,6 @@ const COBRANZA_PANEL_STATUSES: ApplicationStatus[] = [
   "rejected_by_analyst",
 ]
 
-// Cuántos docs se piden para cada línea (para el preview del modal)
 const DOCS_COUNT_BY_LINE: Record<FundingLine, number> = {
   fgplus: 3,
   financing_general: 3,
@@ -171,10 +167,59 @@ export default async function LegajoDetallePage({
   const { data: existingDictamen } = await supabase
     .from("dictamenes")
     .select(
-      "id, decision, approved_amount, term_months, interest_rate, conditions, observations, justification, analyst_id, created_at, edit_count, last_edited_at, last_edited_by"
+      "id, decision, approved_amount, term_months, interest_rate, conditions, observations, justification, analyst_id, created_at, edit_count, last_edited_at, last_edited_by, comite_evidence_doc_id"
     )
     .eq("application_id", id)
     .maybeSingle()
+
+  // ============================================================
+  // Cargar nombre del analista que firmó el dictamen (para banner)
+  // ============================================================
+  let analystName: string | null = null
+  if (existingDictamen?.analyst_id) {
+    const { data: analystProfile } = await supabase
+      .from("profiles")
+      .select("full_name")
+      .eq("id", existingDictamen.analyst_id)
+      .maybeSingle()
+    analystName = analystProfile?.full_name ?? null
+  }
+
+  // ============================================================
+  // Cargar comprobante del comité (si existe)
+  // ============================================================
+  let comiteEvidence: {
+    id: string
+    file_name: string
+    file_size_bytes: number | null
+    mime_type: string | null
+    signed_url: string | null
+  } | null = null
+
+  if (existingDictamen?.comite_evidence_doc_id) {
+    const { data: evidenceDoc } = await supabase
+      .from("documents")
+      .select("id, file_name, file_size_bytes, mime_type, file_path")
+      .eq("id", existingDictamen.comite_evidence_doc_id)
+      .maybeSingle()
+
+    if (evidenceDoc) {
+      let signedUrl: string | null = null
+      if (evidenceDoc.file_path) {
+        const { data: signed } = await supabase.storage
+          .from(STORAGE_BUCKET)
+          .createSignedUrl(evidenceDoc.file_path, 3600)
+        signedUrl = signed?.signedUrl ?? null
+      }
+      comiteEvidence = {
+        id: evidenceDoc.id,
+        file_name: evidenceDoc.file_name,
+        file_size_bytes: evidenceDoc.file_size_bytes,
+        mime_type: evidenceDoc.mime_type,
+        signed_url: signedUrl,
+      }
+    }
+  }
 
   const { data: rawHistory } = await supabase
     .from("applications")
@@ -260,7 +305,6 @@ export default async function LegajoDetallePage({
 
     const codes = rawCodes ?? []
 
-    // Recolectar todos los doc_ids para cargarlos en una sola query
     const allDocIds: string[] = []
     for (const c of codes) {
       if (c.autorizacion_descuento_doc_id) allDocIds.push(c.autorizacion_descuento_doc_id)
@@ -277,7 +321,6 @@ export default async function LegajoDetallePage({
         .select("id, file_name, file_size_bytes, file_path")
         .in("id", allDocIds)
 
-      // Generar signed URLs (válidas por 1 hora) para cada doc
       for (const d of docsData ?? []) {
         let signedUrl: string | null = null
         if (d.file_path) {
@@ -336,9 +379,6 @@ export default async function LegajoDetallePage({
     profile.role === "admin" ||
     (profile.role === "officer" && app.assigned_officer_id === user.id)
 
-  // ============================================================
-  // ¿Mostrar el botón "Pedir docs de línea"?
-  // ============================================================
   const initialDocs = documents.filter((d) => d.doc_phase === "initial")
   const allInitialDocsApproved =
     initialDocs.length > 0 && initialDocs.every((d) => d.status === "approved")
@@ -354,26 +394,24 @@ export default async function LegajoDetallePage({
     ? DOCS_COUNT_BY_LINE[app.funding_line]
     : 0
 
-  // ============================================================
-  // ¿Mostrar el botón "Aprobar pedido de información"?
-  // ============================================================
-  // Condiciones:
-  //  - Usuario puede actuar (officer asignado o admin)
-  //  - Status = additional_docs_review (cliente ya envió formalmente)
-  //  - Línea es FGPlus (solo FGPlus tiene este flujo)
   const showApproveInfoButton =
     canActOnDocs &&
     app.status === "additional_docs_review" &&
     app.funding_line === "fgplus"
 
-  // Resumen del árbol para el modal de aprobación
   const cobranzaCanales = cobranzaData?.channels.length ?? 0
   const cobranzaCodigosTotal = cobranzaData?.codes.length ?? 0
   const cobranzaCodigosExcluidos =
     cobranzaData?.codes.filter((c) => c.is_excluded).length ?? 0
   const cobranzaCodigosCompletos = cobranzaCodigosTotal - cobranzaCodigosExcluidos
 
-  // ¿Hay algo que mostrar en la columna derecha?
+  // ============================================================
+  // ¿Mostrar el banner del dictamen arriba del legajo?
+  // Solo para el oficial (Carlos no es el analista que ya cargó el dictamen)
+  // ============================================================
+  const showDictamenBanner =
+    profile.role === "officer" && !!existingDictamen
+
   const hasRightColumn =
     showDictamenForm ||
     history.length > 0 ||
@@ -444,6 +482,20 @@ export default async function LegajoDetallePage({
         </div>
       </header>
 
+      {/* Banner del dictamen para el oficial */}
+      {showDictamenBanner && existingDictamen ? (
+        <LegajoDictamenBanner
+          dictamen={{
+            decision: existingDictamen.decision as DictamenDecision,
+            approved_amount: existingDictamen.approved_amount as number | null,
+            term_months: existingDictamen.term_months as number | null,
+            interest_rate: existingDictamen.interest_rate as number | null,
+            created_at: existingDictamen.created_at,
+          }}
+          analystName={analystName}
+        />
+      ) : null}
+
       {/* Grid principal: adaptativo según si hay columna derecha o no */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         <div className={`${hasRightColumn ? "lg:col-span-9" : "lg:col-span-12"} space-y-4`}>
@@ -472,7 +524,6 @@ export default async function LegajoDetallePage({
 
         {hasRightColumn ? (
           <div className="lg:col-span-3 space-y-4">
-            {/* Botón de avance a docs de línea (acción principal cuando aplica) */}
             {showAdvanceButton && app.funding_line ? (
               <LegajoAdvanceButton
                 applicationId={app.id}
@@ -482,7 +533,6 @@ export default async function LegajoDetallePage({
               />
             ) : null}
 
-            {/* Botón de aprobación del pedido de información (acción principal cuando aplica) */}
             {showApproveInfoButton ? (
               <LegajoApproveInfoButton
                 applicationId={app.id}
@@ -495,11 +545,14 @@ export default async function LegajoDetallePage({
             ) : null}
 
             {showDictamenForm ? (
-              <LegajoDictamenForm
-                applicationId={app.id}
-                existingDictamen={existingDictamen ?? null}
-                applicationStatus={app.status}
-              />
+              <div id="dictamen-card">
+                <LegajoDictamenForm
+                  applicationId={app.id}
+                  existingDictamen={existingDictamen ?? null}
+                  applicationStatus={app.status}
+                  existingComiteEvidence={comiteEvidence}
+                />
+              </div>
             ) : null}
 
             {history.length > 0 ? (
