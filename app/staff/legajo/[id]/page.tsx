@@ -173,7 +173,7 @@ export default async function LegajoDetallePage({
     .maybeSingle()
 
   // ============================================================
-  // Cargar nombre del analista que firmó el dictamen (para banner)
+  // Cargar nombre del analista que firmó el dictamen (para el banner)
   // ============================================================
   let analystName: string | null = null
   if (existingDictamen?.analyst_id) {
@@ -407,7 +407,8 @@ export default async function LegajoDetallePage({
 
   // ============================================================
   // ¿Mostrar el banner del dictamen arriba del legajo?
-  // Solo para el oficial (Carlos no es el analista que ya cargó el dictamen)
+  // Solo para el oficial: el analista ya cargó el dictamen y no
+  // necesita destacarlo otra vez.
   // ============================================================
   const showDictamenBanner =
     profile.role === "officer" && !!existingDictamen
