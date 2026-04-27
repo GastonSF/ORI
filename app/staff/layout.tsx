@@ -3,6 +3,7 @@ import { StaffTopBar } from "@/components/staff/staff-top-bar"
 import { StaffSidebar } from "@/components/staff/staff-sidebar"
 import type { UserRole } from "@/lib/constants/roles"
 import { Toaster } from "sonner"
+import { FooterCredit } from "@/components/shared/footer-credit"
 
 /**
  * Layout global del staff (oficial, analista, admin).
@@ -36,6 +37,7 @@ export default async function StaffLayout({
         <div className="max-w-6xl mx-auto px-4 md:px-8 py-6">
           {children}
         </div>
+        <FooterCredit />
       </main>
 
       <Toaster
