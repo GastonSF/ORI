@@ -1,6 +1,7 @@
 import { requireRole } from "@/lib/auth/session"
 import { TopBar } from "@/components/shared/top-bar"
 import { Sidebar } from "@/components/shared/sidebar"
+import { FooterCredit } from "@/components/shared/footer-credit"
 
 export default async function ClientLayout({ children }: { children: React.ReactNode }) {
   const { profile } = await requireRole("client")
@@ -12,6 +13,7 @@ export default async function ClientLayout({ children }: { children: React.React
         <Sidebar role="client" />
         <main className="flex-1 p-6 md:p-8 overflow-auto">{children}</main>
       </div>
+      <FooterCredit />
     </div>
   )
 }
