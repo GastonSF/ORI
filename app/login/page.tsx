@@ -1,5 +1,6 @@
 import Link from "next/link"
 import { LoginForm } from "@/components/auth/login-form"
+import { FooterCredit } from "@/components/shared/footer-credit"
 
 type SearchParams = Promise<{ error?: string; next?: string }>
 
@@ -35,43 +36,48 @@ export default async function LoginPage(props: { searchParams: SearchParams }) {
       </aside>
 
       {/* Panel de formulario */}
-      <main className="flex items-center justify-center p-6 sm:p-12 bg-white">
-        <div className="w-full max-w-md">
-          <div className="lg:hidden mb-8">
-            <Link href="/" className="text-2xl font-bold tracking-tight text-[#1b38e8]">
-              WORCAP
-            </Link>
-          </div>
-
-          <h1 className="text-2xl font-semibold text-gray-900">Iniciá sesión</h1>
-          <p className="mt-2 text-sm text-gray-600">
-            Ingresá con tu cuenta para continuar.
-          </p>
-
-          {errorMsg && (
-            <div
-              role="alert"
-              className="mt-6 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700"
-            >
-              {errorMsg}
+      <main className="flex flex-col items-center p-6 sm:p-12 bg-white">
+        <div className="flex-1 w-full flex items-center justify-center">
+          <div className="w-full max-w-md">
+            <div className="lg:hidden mb-8">
+              <Link href="/" className="text-2xl font-bold tracking-tight text-[#1b38e8]">
+                WORCAP
+              </Link>
             </div>
-          )}
 
-          <div className="mt-8">
-            <LoginForm nextPath={searchParams.next} />
-          </div>
+            <h1 className="text-2xl font-semibold text-gray-900">Iniciá sesión</h1>
+            <p className="mt-2 text-sm text-gray-600">
+              Ingresá con tu cuenta para continuar.
+            </p>
 
-          <div className="mt-6 flex items-center justify-between text-sm">
-            <Link
-              href="/forgot-password"
-              className="text-[#1b38e8] hover:underline"
-            >
-              Olvidé mi contraseña
-            </Link>
-            <Link href="/register" className="text-gray-600 hover:text-gray-900">
-              Crear cuenta
-            </Link>
+            {errorMsg && (
+              <div
+                role="alert"
+                className="mt-6 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700"
+              >
+                {errorMsg}
+              </div>
+            )}
+
+            <div className="mt-8">
+              <LoginForm nextPath={searchParams.next} />
+            </div>
+
+            <div className="mt-6 flex items-center justify-between text-sm">
+              <Link
+                href="/forgot-password"
+                className="text-[#1b38e8] hover:underline"
+              >
+                Olvidé mi contraseña
+              </Link>
+              <Link href="/register" className="text-gray-600 hover:text-gray-900">
+                Crear cuenta
+              </Link>
+            </div>
           </div>
+        </div>
+        <div className="w-full max-w-md mt-8">
+          <FooterCredit />
         </div>
       </main>
     </div>
